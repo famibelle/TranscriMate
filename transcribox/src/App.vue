@@ -33,7 +33,7 @@
               class="speaker" 
               @click="playAudio(segment.audio_url)" 
               @contextmenu.prevent="enableEditMode(segment, $event)">
-              {{ segment.speaker }}:
+              ▶️{{ segment.speaker }}:
             </span>
             <input
               v-else
@@ -53,7 +53,7 @@
                 v-for="(chunk, i) in segment.text.chunks" 
                 :key="i" 
                 class="chunk" 
-                @click="playChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1])">
+                @click="playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i)">
                 {{ chunk.text }}
               </span>
             </div>
@@ -62,11 +62,15 @@
   </div>
 
       <!-- Section pour afficher les statistiques de temps de parole -->
-      <div v-if="speechStats">
-        <h3>Statistiques des temps de parole</h3>
+      <div class="stats-container">
+        <h3>📊 Détection</h3>
+        <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
+        <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
+
+        <h3>👥 Répartition temps de parole</h3>
         <ul>
-          <li v-for="(time, speaker) in speechStats" :key="speaker">
-            {{ speaker }} : {{ formatTime(time) }} de temps de parole
+          <li v-for="(speakerStat, index) in speechStats.speakers" :key="index">
+            {{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}%
           </li>
         </ul>
       </div>
@@ -113,8 +117,14 @@ export default {
       currentTime: 0,  // Temps actuel de la lecture
       audioDuration: 0,  // Durée totale de l'audio
       transcriptions: [],  // Ce tableau sera rempli par des transcriptions réelles du backend
-      speechStats: null,  // Stocker les statistiques de temps de parole
-      oldSpeakerName: ''  // Stocker l'ancien nom du speaker avant l'édition
+      speechStats: {
+        totalSpeakers: 0, // Nombre de locuteurs par défaut
+        totalDuration: 0,  // Durée totale par défaut
+        speakers: []       // Tableau vide pour la répartition des temps de parole
+      },
+        oldSpeakerName: '',  // Stocker l'ancien nom du speaker avant l'édition
+      currentAudio: null, // Pour garder une référence à l'audio en cours
+      currentChunkIndex: null, // Pour garder une trace du chunk en cours de lecture
     };
   },
 
@@ -132,6 +142,41 @@ export default {
   },
 
   methods: {
+    // Formater le temps en minutes et secondes
+    formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = Math.floor(seconds % 60);
+      return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
+    },
+
+    playOrPauseChunk(audioUrl, startTime, endTime, chunkIndex) {
+      // Si un audio est déjà en cours de lecture et qu'il s'agit du même chunk, on le met en pause
+      if (this.currentAudio && this.currentChunkIndex === chunkIndex) {
+        this.currentAudio.pause();
+        this.currentAudio = null; // Réinitialiser l'état
+        this.currentChunkIndex = null;
+      } else {
+        // Si un autre chunk est en cours de lecture, on le met en pause avant d'en jouer un nouveau
+        if (this.currentAudio) {
+          this.currentAudio.pause();
+        }
+
+        // Créer un nouvel objet Audio pour jouer le nouveau chunk
+        const audio = new Audio(audioUrl);
+        audio.currentTime = startTime;
+        audio.play();
+
+        // Définir un timeout pour arrêter l'audio à la fin du chunk
+        setTimeout(() => {
+          audio.pause();
+        }, (endTime - startTime) * 1000); // Convertir le temps en millisecondes
+
+        // Stocker la référence de l'audio en cours et l'index du chunk
+        this.currentAudio = audio;
+        this.currentChunkIndex = chunkIndex;
+      }
+    },
+
     // Activer le mode d'édition pour un segment
     enableEditMode(segment) {
       this.oldSpeakerName = segment.speaker;  // Sauvegarder le nom original avant édition
@@ -157,16 +202,39 @@ export default {
     // Méthode pour calculer les temps de parole des speakers
     calculateSpeechStats() {
       const stats = {};
+      let totalDuration = 0; // Variable pour la durée totale de l'audio
+
+      // Calculer le temps de parole pour chaque locuteur et la durée totale
       this.transcriptions.forEach(segment => {
         const speaker = segment.speaker;
         const duration = segment.end_time - segment.start_time; // Durée du segment
+        totalDuration += duration; // Ajouter à la durée totale
+
         if (!stats[speaker]) {
           stats[speaker] = 0;  // Initialiser à zéro si ce speaker n'a pas encore été ajouté
         }
-        stats[speaker] += duration;  // Ajouter la durée du segment à la durée totale du speaker
+        stats[speaker] += duration;  // Ajouter la durée du segment au speaker
       });
-      this.speechStats = stats;  // Mettre à jour les statistiques
+
+      // Calculer les pourcentages pour chaque locuteur
+      const percentageStats = Object.entries(stats).map(([speaker, time]) => {
+        return {
+          speaker: speaker,
+          percentage: (time / totalDuration) * 100  // Calculer le pourcentage
+        };
+      });
+
+      // Trier les locuteurs par ordre décroissant de temps de parole
+      percentageStats.sort((a, b) => b.percentage - a.percentage);
+
+      // Stocker les statistiques mises à jour
+      this.speechStats = {
+        totalDuration: totalDuration,  // Durée totale de l'audio
+        speakers: percentageStats,  // Répartition des locuteurs et pourcentages
+        totalSpeakers: percentageStats.length  // Nombre de locuteurs identifiés
+      };
     },
+
 
     // Méthode pour jouer l'audio d'un segment complet
     playAudio(audioUrl) {
@@ -241,13 +309,6 @@ export default {
     // Rechercher un moment spécifique dans l'audio
     seekAudio() {
       this.audio.currentTime = this.currentTime;
-    },
-
-    // Formater le temps en minutes et secondes
-    formatTime(time) {
-      const minutes = Math.floor(time / 60);
-      const seconds = Math.floor(time % 60).toString().padStart(2, '0');
-      return `${minutes}:${seconds}`;
     },
 
     // Ouvrir les paramètres (à personnaliser)
