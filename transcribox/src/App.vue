@@ -33,7 +33,7 @@
               class="speaker" 
               @click="playAudio(segment.audio_url)" 
               @contextmenu.prevent="enableEditMode(segment, $event)">
-              ▶️{{ segment.speaker }}:
+              {{ segment.speaker }}:
             </span>
             <input
               v-else
@@ -521,6 +521,15 @@ button:hover {
 
 .speaker:hover {
   background-color: rgb(0, 255, 76); /* Surlignage à la manière d'un stabilo lorsqu'actif */
+}
+
+/* Ajouter l'emoji ▶️ lors du survol */
+.speaker:hover::before {
+  content: '▶️ ';
+  font-size: 16px;
+  color: inherit; /* Optionnel, pour garder la même couleur que le speaker */
+  position: relative;
+  left: 5px; /* Ajuste la distance entre le texte et l'emoji */
 }
 
 textarea {
