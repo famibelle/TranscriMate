@@ -12,11 +12,17 @@ import tqdm
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+import sys
+
 from dotenv import load_dotenv
 import torch
 from moviepy.editor import *
 from pydub import AudioSegment
 from transformers import pipeline
+
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 
 load_dotenv()
 
@@ -160,7 +166,8 @@ async def upload_file(file: UploadFile = File(...)):
 
                 # Transcrire ce segment avec Whisper
                 transcription = Transcriber_Whisper(
-                    segment_path, 
+                    segment_path,
+                    # input_features= segment_path, 
                     return_timestamps = True, 
                     # return_timestamps="word",
                     generate_kwargs={"task": "transcribe"}
@@ -181,8 +188,9 @@ async def upload_file(file: UploadFile = File(...)):
                 full_transcription.append(segment)
 
                 yield f"{json.dumps(segment)}\n"  # Envoi du segment de transcription en JSON
-
                 logging.debug(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
+                sys.stdout.flush()  # Forcer l'envoi immédiat du segment
+
 
         # Retourner les résultats en streaming
         return StreamingResponse(live_process_audio(), media_type="application/json")
