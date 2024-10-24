@@ -27,7 +27,9 @@
       <!-- Liste des locuteurs et des segments de transcription -->
       <div class="transcriptions">
         <div v-for="(segment, index) in transcriptions" :key="index" class="transcription-segment">
-          <strong>{{ segment.speaker }}</strong>
+          <span class="speaker" @click="playAudio(segment.audio_url)">
+            📢{{ segment.speaker }}
+          </span>
 
           <!-- Liste des chunks -->
           <span 
@@ -62,7 +64,7 @@
       >
         <p>🎵 Déposez votre fichier audio ou vidéo ici</p>
         <p>ou</p>
-        <button @click="triggerFileInput">Sélectionnez un fichier</button>
+        <button @click.stop="triggerFileInput">Sélectionnez un fichier</button>
         <p>Formats supportés : MP3, MP4, WAV, WebM</p>
       </div>
       <input
@@ -98,11 +100,18 @@ export default {
           const text = segment.text.chunks.map(chunk => chunk.text).join(' ');
           return speaker + text;
         })
-        .join('\n\n');  // Ajouter une séparation entre chaque locuteur
+        .join('\n');  // Ajouter une séparation entre chaque locuteur
     }
   },
 
   methods: {
+
+    // Méthode pour jouer l'audio d'un segment complet
+    playAudio(audioUrl) {
+      const audio = new Audio(audioUrl);  // Créer une instance d'Audio avec l'URL du segment
+      audio.play();  // Jouer l'audio
+    },
+
     // Méthode pour copier la transcription complète dans le presse-papiers
     copyToClipboard() {
       navigator.clipboard.writeText(this.fullTranscription)
@@ -130,6 +139,7 @@ export default {
       const files = event.target.files;
       if (files.length) {
         this.file = files[0];  // Stocke le fichier sélectionné
+        console.log("Fichier sélectionné :", this.file);
         this.setupAudio();  // Préparer l'audio
         this.uploadFile();  // Envoyer le fichier au backend et récupérer la transcription
       }
@@ -194,7 +204,7 @@ export default {
 
     // Déclenche le dialogue de sélection de fichier
     triggerFileInput() {
-      this.$refs.fileInput.click();  // Simule un clic sur le champ d'upload caché
+      this.$refs.fileInput.click();  // Simule un clic sur l'input file caché
     },
 
     // Envoie le fichier au backend et récupère les transcriptions
@@ -328,6 +338,16 @@ button:hover {
   color: blue;
   margin-right: 5px;
   transition: color 0.3s ease; /* Ajout d'une transition fluide pour l'effet de survol */
+}
+
+/* Style pour rendre le texte du speaker cliquable */
+.speaker {
+  cursor: pointer;
+  font-weight: bold;  /* Mettre en gras par défaut */
+}
+
+.speaker:hover {
+  font-weight: normal;  /* Supprimer le gras lors du survol */
 }
 
 .chunk:hover {
