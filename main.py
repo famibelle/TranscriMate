@@ -151,8 +151,12 @@ async def upload_file(file: UploadFile = File(...)):
             logging.debug(f"total_turns: {total_turns}")
             
             total_turns = len(list(diarization.itertracks(yield_label=True))) 
+            turn_number = 0
             # for turn, _, speaker in tqdm(diarization.itertracks(yield_label=True), total=total_turns, desc="Processing turns"):
             for turn, _, speaker in diarization.itertracks(yield_label=True):
+                turn_number += 1
+                logging.debug(f"Tour {turn_number}/{total_turns}")
+
                 # Étape 2 : Transcription pour chaque segment
                 start_ms = int(turn.start * 1000)  # Convertir de secondes en millisecondes
                 end_ms = int(turn.end * 1000)

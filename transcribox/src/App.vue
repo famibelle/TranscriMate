@@ -44,16 +44,25 @@
           <!-- <audio :src="segment.audio_url" controls></audio> -->
         </div>
 
+        <!-- Section pour afficher les statistiques de temps de parole -->
+        <div v-if="speechStats">
+          <h3>Statistiques des temps de parole</h3>
+          <ul>
+            <li v-for="(time, speaker) in speechStats" :key="speaker">
+              {{ speaker }} : {{ formatTime(time) }} de temps de parole
+            </li>
+          </ul>
+        </div>
+
       <!-- Textarea pour l'ensemble de la transcription -->
       <div v-if="transcriptions.length > 0" class="transcription-full">
         <h3>Transcription complète</h3>
         <textarea v-model="fullTranscription" readonly></textarea>
         <button @click="copyToClipboard">Copier</button>
       </div>
-
       </div>
     </div>
-
+    
     <!-- Interface d'upload si aucun fichier n'est sélectionné -->
     <div v-else class="upload-container">
       <div 
@@ -87,7 +96,8 @@ export default {
       isPlaying: false,  // Indique si l'audio est en cours de lecture
       currentTime: 0,  // Temps actuel de la lecture
       audioDuration: 0,  // Durée totale de l'audio
-      transcriptions: []  // Ce tableau sera rempli par des transcriptions réelles du backend
+      transcriptions: [],  // Ce tableau sera rempli par des transcriptions réelles du backend
+      speechStats: null  // Stocker les statistiques de temps de parole
     };
   },
 
@@ -105,6 +115,19 @@ export default {
   },
 
   methods: {
+    // Méthode pour calculer les temps de parole des speakers
+    calculateSpeechStats() {
+      const stats = {};
+      this.transcriptions.forEach(segment => {
+        const speaker = segment.speaker;
+        const duration = segment.end_time - segment.start_time; // Durée du segment
+        if (!stats[speaker]) {
+          stats[speaker] = 0;  // Initialiser à zéro si ce speaker n'a pas encore été ajouté
+        }
+        stats[speaker] += duration;  // Ajouter la durée du segment à la durée totale du speaker
+      });
+      this.speechStats = stats;  // Mettre à jour les statistiques
+    },
 
     // Méthode pour jouer l'audio d'un segment complet
     playAudio(audioUrl) {
@@ -245,6 +268,8 @@ export default {
             }
           }
         }
+        this.calculateSpeechStats();  // Calculer les statistiques après réception des transcriptions
+
       } catch (error) {
         console.error("Erreur lors de l'upload ou récupération des transcriptions", error);
       }
@@ -335,9 +360,16 @@ button:hover {
 
 .chunk {
   cursor: pointer;
-  color: blue;
-  margin-right: 5px;
   transition: color 0.3s ease; /* Ajout d'une transition fluide pour l'effet de survol */
+}
+
+.chunk:hover {
+  background-color: yellow; /* Ajouter un surlignage doux lors du hover */
+}
+
+.active {
+  background-color: yellow; /* Surlignage à la manière d'un stabilo lorsqu'actif */
+  font-weight: bold; /* Facultatif : Mettre le texte en gras lors de l'activité */
 }
 
 /* Style pour rendre le texte du speaker cliquable */
@@ -347,12 +379,7 @@ button:hover {
 }
 
 .speaker:hover {
-  font-weight: normal;  /* Supprimer le gras lors du survol */
-}
-
-.chunk:hover {
-  color: rgb(140, 0, 255); /* Change la couleur au survol */
-  text-decoration: underline; /* Ajoute un soulignement en vagues au survol */
+  background-color: rgb(0, 255, 76); /* Surlignage à la manière d'un stabilo lorsqu'actif */
 }
 
 textarea {
