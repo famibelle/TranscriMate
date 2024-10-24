@@ -25,46 +25,51 @@
       </div>
 
       <!-- Liste des locuteurs et des segments de transcription -->
-      <div class="transcriptions">
-        <div v-for="(segment, index) in transcriptions" :key="index" class="transcription-segment">
-          <span 
-            v-if="!segment.isEditing" 
-            class="speaker" 
-            @click="playAudio(segment.audio_url)" 
-            @contextmenu.prevent="enableEditMode(segment, $event)">
-            📢{{ segment.speaker }}
-          </span>
-          <input
-            v-else
-            class="edit-input"
-            type="text"
-            v-model="segment.speaker"
-            @blur="applySpeakerChange(segment)"
-            @keyup.enter="applySpeakerChange(segment)"
-          />
+      <div v-for="(segment, index) in transcriptions" :key="index" class="transcription-segment">
+        <div class="message">
+          <div class="message-header">
+            <span 
+              v-if="!segment.isEditing" 
+              class="speaker" 
+              @click="playAudio(segment.audio_url)" 
+              @contextmenu.prevent="enableEditMode(segment, $event)">
+              {{ segment.speaker }}:
+            </span>
+            <input
+              v-else
+              class="edit-input"
+              type="text"
+              v-model="segment.speaker"
+              @blur="applySpeakerChange(segment)"
+              @keyup.enter="applySpeakerChange(segment)"
+            />
+          </div>
 
-          <!-- Liste des chunks -->
-          <span 
-            v-for="(chunk, i) in segment.text.chunks" 
-            :key="i" 
-            class="chunk" 
-            @click="playChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1])">
-            {{ chunk.text }}
-          </span>
+      <!-- Texte complet du segment entouré dans une bulle -->
+      <div class="message-body">
+          <!-- Contenu du message (transcription) -->
+            <div class="chunk-container">
+              <span 
+                v-for="(chunk, i) in segment.text.chunks" 
+                :key="i" 
+                class="chunk" 
+                @click="playChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1])">
+                {{ chunk.text }}
+              </span>
+            </div>
+      </div>
+    </div>
+  </div>
 
-          <!-- Player audio pour le segment -->
-          <!-- <audio :src="segment.audio_url" controls></audio> -->
-        </div>
-
-        <!-- Section pour afficher les statistiques de temps de parole -->
-        <div v-if="speechStats">
-          <h3>Statistiques des temps de parole</h3>
-          <ul>
-            <li v-for="(time, speaker) in speechStats" :key="speaker">
-              {{ speaker }} : {{ formatTime(time) }} de temps de parole
-            </li>
-          </ul>
-        </div>
+      <!-- Section pour afficher les statistiques de temps de parole -->
+      <div v-if="speechStats">
+        <h3>Statistiques des temps de parole</h3>
+        <ul>
+          <li v-for="(time, speaker) in speechStats" :key="speaker">
+            {{ speaker }} : {{ formatTime(time) }} de temps de parole
+          </li>
+        </ul>
+      </div>
 
       <!-- Textarea pour l'ensemble de la transcription -->
       <div v-if="transcriptions.length > 0" class="transcription-full">
@@ -73,7 +78,6 @@
         <button @click="copyToClipboard">Copier</button>
       </div>
       </div>
-    </div>
     
     <!-- Interface d'upload si aucun fichier n'est sélectionné -->
     <div v-else class="upload-container">
@@ -393,24 +397,65 @@ button:hover {
   margin-bottom: 10px;
 }
 
+.message-body {
+  position: relative;
+  background-color: #e1ffc7;
+  padding: 3px 10px 10px 10px; /* 3px en haut, 10px sur les côtés et en bas */
+  border-radius: 8px;
+  display: inline-block;
+  max-width: 90%;
+  margin-bottom: 10px;
+  font-family: 'Roboto', sans-serif;
+}
+
+/* Ajout d'une petite flèche à gauche de la bulle */
+.message-body::before {
+  content: "";
+  position: absolute;
+  top: 10px; /* Ajuste pour positionner la flèche verticalement */
+  left: -10px; /* Ajuste pour la position horizontale */
+  border-width: 10px;
+  border-style: solid;
+  border-color: transparent #e1ffc7 transparent transparent; /* Flèche triangulaire vers la gauche */
+}
+
+.message-text {
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  margin: 0;
+}
+
+.chunk-container {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 .chunk {
+  background-color: #e1ffc7;
+  border-radius: 2px;
   cursor: pointer;
-  transition: color 0.3s ease; /* Ajout d'une transition fluide pour l'effet de survol */
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .chunk:hover {
   background-color: yellow; /* Ajouter un surlignage doux lors du hover */
 }
 
-.active {
-  background-color: yellow; /* Surlignage à la manière d'un stabilo lorsqu'actif */
-  font-weight: bold; /* Facultatif : Mettre le texte en gras lors de l'activité */
+.chunk:active {
+  background-color: #a5d096;  /* Changement de couleur au clic */
 }
 
 /* Style pour rendre le texte du speaker cliquable */
 .speaker {
   cursor: pointer;
   font-weight: bold;  /* Mettre en gras par défaut */
+  position: relative;
+  background-color: #e7ffc7;
+  border-radius: 8px;
+  display: inline-block;
+  max-width: 90%;
 }
 
 .speaker:hover {
