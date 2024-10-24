@@ -94,6 +94,9 @@ app.add_middleware(
 async def upload_file(file: UploadFile = File(...)):
     file_path = f"/tmp/{file.filename}"
 
+    full_transcription =  []
+    full_transcription_text = "\n"
+
     # Détection de l'extension du fichier
     file_extension = os.path.splitext(file_path)[1].lower()
     logging.debug(f"Extension détectée {file_extension}.")
@@ -136,11 +139,12 @@ async def upload_file(file: UploadFile = File(...)):
             diarization = diarization_model(audio_path, hook=hook)
 
         # Streaming des résultats
-        async def process_audio():
+        async def live_process_audio():
             # Exporter les segments pour chaque locuteur
             total_turns = len(list(diarization.itertracks(yield_label=True))) 
             logging.debug(f"total_turns: {total_turns}")
             
+            total_turns = len(list(diarization.itertracks(yield_label=True))) 
             # for turn, _, speaker in tqdm(diarization.itertracks(yield_label=True), total=total_turns, desc="Processing turns"):
             for turn, _, speaker in diarization.itertracks(yield_label=True):
                 # Étape 2 : Transcription pour chaque segment
@@ -174,16 +178,20 @@ async def upload_file(file: UploadFile = File(...)):
                 }
 
                 logging.debug(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée\n Résultat de la transcription {segment}")
+                full_transcription.append(segment)
 
                 yield f"{json.dumps(segment)}\n"  # Envoi du segment de transcription en JSON
 
                 logging.debug(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
 
         # Retourner les résultats en streaming
-        return StreamingResponse(process_audio(), media_type="application/json")
+        return StreamingResponse(live_process_audio(), media_type="application/json")
+
 
     finally:
         logging.debug(f"->> fin de transcription <<")
+        print(full_transcription)
+
         # Nettoyage : supprimer le fichier temporaire après traitement
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -236,6 +244,9 @@ async def process_audio(file: UploadFile = File(...)):
             diarization = diarization_model(audio_path, hook=hook)
 
         segments = []
+
+        # total_turns = len(list(diarization.itertracks(yield_label=True))) 
+        # for turn, _, speaker in tqdm(diarization.itertracks(yield_label=True), total=total_turns, desc="Processing turns"):
         for turn, _, speaker in diarization.itertracks(yield_label=True):
             # Étape 2 : Transcription pour chaque segment
             start_ms = int(turn.start * 1000)  # Convertir de secondes en millisecondes

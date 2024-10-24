@@ -27,7 +27,7 @@
       <!-- Liste des locuteurs et des segments de transcription -->
       <div class="transcriptions">
         <div v-for="(segment, index) in transcriptions" :key="index" class="transcription-segment">
-          <strong>{{ segment.speaker }} ({{ formatTime(segment.start_time) }})</strong>
+          <strong>{{ segment.speaker }}</strong>
 
           <!-- Liste des chunks -->
           <span 
@@ -39,8 +39,16 @@
           </span>
 
           <!-- Player audio pour le segment -->
-          <audio :src="segment.audio_url" controls></audio>
+          <!-- <audio :src="segment.audio_url" controls></audio> -->
         </div>
+
+      <!-- Textarea pour l'ensemble de la transcription -->
+      <div v-if="transcriptions.length > 0" class="transcription-full">
+        <h3>Transcription complète</h3>
+        <textarea v-model="fullTranscription" readonly></textarea>
+        <button @click="copyToClipboard">Copier</button>
+      </div>
+
       </div>
     </div>
 
@@ -80,7 +88,28 @@ export default {
       transcriptions: []  // Ce tableau sera rempli par des transcriptions réelles du backend
     };
   },
+
+  computed: {
+    // Computed property pour concaténer toute la transcription
+    fullTranscription() {
+      return this.transcriptions
+        .map(segment => {
+          const speaker = segment.speaker + ": ";
+          const text = segment.text.chunks.map(chunk => chunk.text).join(' ');
+          return speaker + text;
+        })
+        .join('\n\n');  // Ajouter une séparation entre chaque locuteur
+    }
+  },
+
   methods: {
+    // Méthode pour copier la transcription complète dans le presse-papiers
+    copyToClipboard() {
+      navigator.clipboard.writeText(this.fullTranscription)
+        .then(() => alert('Texte copié dans le presse-papiers !'))
+        .catch(err => console.error('Erreur lors de la copie :', err));
+    },
+
     // Méthode pour lire un chunk spécifique
     playChunk(audioUrl, start, end) {
       const audio = new Audio(audioUrl);
@@ -304,5 +333,16 @@ button:hover {
 .chunk:hover {
   color: rgb(140, 0, 255); /* Change la couleur au survol */
   text-decoration: underline; /* Ajoute un soulignement en vagues au survol */
+}
+
+textarea {
+  width: 100%;
+  height: 200px;
+  margin-top: 10px;
+  font-size: 16px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  resize: none;
 }
 </style>
