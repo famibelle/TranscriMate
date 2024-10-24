@@ -27,9 +27,21 @@
       <!-- Liste des locuteurs et des segments de transcription -->
       <div class="transcriptions">
         <div v-for="(segment, index) in transcriptions" :key="index" class="transcription-segment">
-          <span class="speaker" @click="playAudio(segment.audio_url)">
+          <span 
+            v-if="!segment.isEditing" 
+            class="speaker" 
+            @click="playAudio(segment.audio_url)" 
+            @contextmenu.prevent="enableEditMode(segment, $event)">
             📢{{ segment.speaker }}
           </span>
+          <input
+            v-else
+            class="edit-input"
+            type="text"
+            v-model="segment.speaker"
+            @blur="applySpeakerChange(segment)"
+            @keyup.enter="applySpeakerChange(segment)"
+          />
 
           <!-- Liste des chunks -->
           <span 
@@ -97,7 +109,8 @@ export default {
       currentTime: 0,  // Temps actuel de la lecture
       audioDuration: 0,  // Durée totale de l'audio
       transcriptions: [],  // Ce tableau sera rempli par des transcriptions réelles du backend
-      speechStats: null  // Stocker les statistiques de temps de parole
+      speechStats: null,  // Stocker les statistiques de temps de parole
+      oldSpeakerName: ''  // Stocker l'ancien nom du speaker avant l'édition
     };
   },
 
@@ -115,6 +128,28 @@ export default {
   },
 
   methods: {
+    // Activer le mode d'édition pour un segment
+    enableEditMode(segment) {
+      this.oldSpeakerName = segment.speaker;  // Sauvegarder le nom original avant édition
+      segment.isEditing = true;  // Activer le champ d'édition
+    },
+
+    // Appliquer le changement de nom du speaker à tous les segments
+    applySpeakerChange(segment) {
+      const newSpeaker = segment.speaker;  // Nouveau nom du speaker
+      const oldSpeaker = this.oldSpeakerName;  // Récupérer l'ancien nom du speaker sauvegardé
+
+      // Mettre à jour tous les segments avec le même ancien nom de speaker
+      this.transcriptions.forEach(seg => {
+        if (seg.speaker === oldSpeaker) {
+          seg.speaker = newSpeaker;  // Mettre à jour le speaker
+        }
+      });
+      segment.isEditing = false;  // Désactiver le mode édition
+
+      this.calculateSpeechStats();  // Recalculer les statistiques après la modification
+    },
+
     // Méthode pour calculer les temps de parole des speakers
     calculateSpeechStats() {
       const stats = {};
@@ -391,5 +426,12 @@ textarea {
   border-radius: 5px;
   border: 1px solid #ccc;
   resize: none;
+}
+
+/* Style pour le champ d'édition */
+.edit-input {
+  font-size: 16px;
+  padding: 2px;
+  margin-left: 5px;
 }
 </style>
