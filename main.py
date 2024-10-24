@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 
@@ -192,9 +193,10 @@ async def upload_file(file: UploadFile = File(...)):
                 full_transcription.append(segment)
 
                 yield f"{json.dumps(segment)}\n"  # Envoi du segment de transcription en JSON
-                logging.debug(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
-                sys.stdout.flush()  # Forcer l'envoi immédiat du segment
+                await asyncio.sleep(0)  # Forcer l'envoi de chaque chunk
 
+                logging.debug(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
+                # sys.stdout.flush()  # Forcer l'envoi immédiat du segment
 
         # Retourner les résultats en streaming
         return StreamingResponse(live_process_audio(), media_type="application/json")
