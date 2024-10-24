@@ -8,21 +8,41 @@
           <button @click="openSettings">⚙️</button>
           <button @click="removeFile">✕</button>
         </div>
-      </div>
 
-      <div class="audio-player">
-        <!-- Bouton de lecture -->
-        <button @click="togglePlay">
-          <span v-if="isPlaying">⏸️</span>
-          <span v-else>▶️</span>
-        </button>
+        <!-- Fenêtre modale pour les paramètres de transcription -->
+        <div v-if="showSettings" class="settings-modal">
+        <div class="settings-content">
+          <h3>Paramètres de transcription</h3>
+          <label for="model-select">Choisir le modèle de transcription :</label>
+          <select id="model-select" v-model="selectedModel">
+            <option value="openai/whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
+            <option value="openai/whisper-large-v3">Whisper Large v3</option>
+            <option value="openai/whisper-tiny">Whisper Tiny</option>
+            <option value="openai/whisper-small">Whisper Small</option>
+            <option value="openai/whisper-medium">Whisper Medium</option>
+            <option value="openai/whisper-base">Whisper Base</option>
+            <option value="openai/whisper-large">Whisper Large</option>
+          </select>
+          <br /><br />
+          <button @click="saveSettings">Enregistrer</button>
+          <button @click="closeSettings">Annuler</button>
+        </div>
+      </div>        
+    </div>
 
-        <!-- Barre de progression -->
-        <input type="range" min="0" :max="audioDuration" v-model="currentTime" @input="seekAudio" />
+    <div class="audio-player">
+      <!-- Bouton de lecture -->
+      <button @click="togglePlay">
+        <span v-if="isPlaying">⏸️</span>
+        <span v-else>▶️</span>
+      </button>
 
-        <!-- Affichage du temps actuel et de la durée totale -->
-        <span>{{ formatTime(currentTime) }} / {{ formatTime(audioDuration) }}</span>
-      </div>
+      <!-- Barre de progression -->
+      <input type="range" min="0" :max="audioDuration" v-model="currentTime" @input="seekAudio" />
+
+      <!-- Affichage du temps actuel et de la durée totale -->
+      <span>{{ formatTime(currentTime) }} / {{ formatTime(audioDuration) }}</span>
+    </div>
 
       <!-- Liste des locuteurs et des segments de transcription -->
       <div v-for="(segment, index) in transcriptions" :key="index" class="transcription-segment">
@@ -31,9 +51,12 @@
             <span 
               v-if="!segment.isEditing" 
               class="speaker" 
-              @click="playAudio(segment.audio_url)" 
+              @click="toggleSpeakerAudio(segment, index)" 
               @contextmenu.prevent="enableEditMode(segment, $event)">
+              <span v-if="playingIndex === index">⏸️</span> 
+              <span v-if="!segment.isEditing">
               {{ segment.speaker }}:
+              </span>
             </span>
             <input
               v-else
@@ -59,6 +82,13 @@
             </div>
       </div>
     </div>
+  </div>
+
+  
+  <div>
+    <!-- Barre de progression ASCII pour la transcription globale -->
+    <pre>{{ updateAsciiProgressBar() }}</pre>
+    <p>{{ transcriptionProgress.toFixed(2) }}% transcrit</p> <!-- Montre le pourcentage -->
   </div>
 
       <!-- Section pour afficher les statistiques de temps de parole -->
@@ -111,6 +141,11 @@
 export default {
   data() {
     return {
+      transcribedTime: 0,  // Temps total déjà transcrit en secondes
+      transcriptionProgress: 0,  // Progression globale en pourcentage
+      playingIndex: null,  // Index du speaker en train d'être lu
+      showSettings: false, // Affiche ou non les paramètres
+      selectedModel: "openai/whisper-large-v3-turbo", // Modèle par défaut
       file: null,  // Stocke le fichier sélectionné ou déposé
       audio: null,  // Instance de l'objet Audio
       isPlaying: false,  // Indique si l'audio est en cours de lecture
@@ -142,6 +177,72 @@ export default {
   },
 
   methods: {
+    loadAudioMetadata(audioUrl) {
+    const audio = new Audio(audioUrl);
+    audio.onloadedmetadata = () => {
+      this.audioDuration = audio.duration;  // Récupérer la durée totale de l'audio
+    };
+    },
+
+    // Méthode à appeler quand la transcription avance
+    updateTranscriptionProgress(transcribedSeconds) {
+      this.transcribedTime = transcribedSeconds;
+      this.transcriptionProgress = (this.transcribedTime / this.audioDuration) * 100;
+    },
+
+    // Méthode pour générer la barre de progression en ASCII art
+    updateAsciiProgressBar() {
+      const barLength = 20;  // Longueur de la barre
+      const filledLength = Math.round((this.transcriptionProgress / 100) * barLength);  // Portion remplie
+      const emptyLength = barLength - filledLength;  // Portion vide
+
+      const filledBar = '█'.repeat(filledLength);  // Blocs remplis
+      const emptyBar = '-'.repeat(emptyLength);  // Blocs vides
+      const progressBar = `[${filledBar}${emptyBar}]`;  // Barre finale
+
+      return progressBar;
+    },
+
+    toggleSpeakerAudio(segment, index) {
+      // Si un autre passage est en lecture, l'arrêter
+      if (this.audio && this.playingIndex !== index) {
+        this.audio.pause();  // Arrêter l'audio en cours
+        this.audio = null;
+        this.playingIndex = null;
+      }
+
+      // Si le passage est déjà en cours de lecture, l'arrêter
+      if (this.playingIndex === index) {
+        this.audio.pause();
+        this.playingIndex = null;
+      } else {
+        // Sinon, démarrer la lecture du segment audio
+        this.audio = new Audio(segment.audio_url);
+        this.audio.play();
+        this.playingIndex = index;
+
+        // Gérer la fin de la lecture pour remettre l'icône ▶️
+        this.audio.onended = () => {
+          this.playingIndex = null;  // Remettre l'icône à ▶️ quand l'audio est terminé
+        };
+      }
+    },
+
+    // Ouvrir les paramètres (à personnaliser)
+    openSettings() {
+      this.showSettings = true; // Ouvrir la fenêtre modale des paramètres
+    },
+
+    closeSettings() {
+      this.showSettings = false; // Fermer la fenêtre modale
+    },
+    saveSettings() {
+      this.showSettings = false; // Fermer les paramètres une fois enregistrés
+      alert(`Modèle de transcription sélectionné : ${this.selectedModel}`);
+      // Logique supplémentaire pour enregistrer les paramètres si nécessaire
+    },
+
+
     // Formater le temps en minutes et secondes
     formatTime(seconds) {
       const minutes = Math.floor(seconds / 60);
@@ -235,7 +336,6 @@ export default {
       };
     },
 
-
     // Méthode pour jouer l'audio d'un segment complet
     playAudio(audioUrl) {
       const audio = new Audio(audioUrl);  // Créer une instance d'Audio avec l'URL du segment
@@ -311,11 +411,6 @@ export default {
       this.audio.currentTime = this.currentTime;
     },
 
-    // Ouvrir les paramètres (à personnaliser)
-    openSettings() {
-      alert("Ouvrir les paramètres");
-    },
-
     // Supprimer le fichier
     removeFile() {
       this.file = null;
@@ -337,7 +432,7 @@ export default {
 
       // Requête POST vers ton backend pour obtenir les transcriptions
       try {
-        const response = await fetch('http://127.0.0.1:8000/uploadfile/', {
+        const response = await fetch('http://localhost:8000/uploadfile/', {
           method: 'POST',
           body: formData
         });
@@ -346,6 +441,8 @@ export default {
         const decoder = new TextDecoder();
         let buffer = '';
         let done = false;
+
+        console.log("Début du streaming...");
 
         // Lire les données reçues en temps réel
         while (!done) {
@@ -362,12 +459,16 @@ export default {
             if (line.trim()) {
               console.log("Segment reçu:", line);  // Ajout du log pour chaque segment reçu
               const segment = JSON.parse(line);  // Convertir le JSON en objet
-              this.transcriptions.push(segment);  // Ajouter le segment à la liste
-              console.log("Transcription mise à jour:", this.transcriptions);  // Log pour vérifier la mise à jour
-              this.$forceUpdate();  // Forcer la mise à jour du DOM pour s'assurer que le frontend se rafraîchit
+              // Créer un nouveau tableau à chaque ajout
+              this.transcriptions.push(segment);  // Ajouter le segment au tableau des transcriptions
+              this.$nextTick(() => {
+                console.log("DOM mis à jour avec le nouveau segment");
+                console.log("Transcription mise à jour:", this.transcriptions);  // Log pour vérifier la mise à jour
+              });  // S'assurer que Vue met à jour le DOM après chaque ajout
             }
           }
         }
+        console.log("Streaming terminé.");
         this.calculateSpeechStats();  // Calculer les statistiques après réception des transcriptions
 
       } catch (error) {
