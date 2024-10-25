@@ -7,8 +7,12 @@ from pyannote.audio.pipelines.utils.hook import ProgressHook
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from json import dumps
+
 import os
 import json
+import re
+
 import tqdm
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -23,7 +27,6 @@ from transformers import pipeline
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
-
 
 load_dotenv()
 
@@ -97,7 +100,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/uploadfile/")
+@app.post("/diarization/")
 async def upload_file(file: UploadFile = File(...)):
     file_path = f"/tmp/{file.filename}"
 
@@ -141,22 +144,82 @@ async def upload_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=404, detail=f"Le fichier {audio_path} n'existe pas.")
 
         with ProgressHook() as hook:
-            # Étape 1 : Diarisation
-            logging.debug(f"Démarrage de la diarisation du fichier {audio_path}")
             diarization = diarization_model(audio_path, hook=hook)
+
+        diarization_json = convert_tracks_to_json(diarization)
+        logging.debug(f"Résultat de la diarization {diarization_json}")
+        return diarization_json
+        
+    finally:
+        logging.debug(f"->> fin de diarization <<")
+        # Nettoyage : supprimer le fichier temporaire après traitement
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logging.debug(f"Fichier temporaire {file_path} supprimé.")
+
+@app.post("/uploadfile/")
+async def upload_file(file: UploadFile = File(...)):
+    file_path = f"/tmp/{file.filename}"
+
+    full_transcription =  []
+    full_transcription_text = "\n"
+
+    # Détection de l'extension du fichier
+    file_extension = os.path.splitext(file_path)[1].lower()
+    logging.debug(f"Extension détectée {file_extension}.")
+
+    try:
+        # Sauvegarder temporairement le fichier uploadé
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
+        logging.debug(f"Fichier {file.filename} sauvegardé avec succès.")
+        # Si le fichier est un fichier audio (formats courants)
+        if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
+            logging.debug(f"fichier audio détecté: {file_extension}.")
+            # Charger le fichier audio avec Pydub
+            audio = AudioSegment.from_file(file_path)
+
+        elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
+            logging.debug(f"fichier vidéo détecté: {file_extension}.")
+            video_clip = VideoFileClip(file_path)
+            audio = AudioSegment.from_file(file_path, format=file.filename)
+
+        logging.debug(f"Conversion du {file.filename} en mono 16kHz.")
+        audio = audio.set_channels(1)
+        audio = audio.set_frame_rate(16000)
+        audio_path = f"{file_path}.wav"
+        logging.debug(f"Sauvegarde de la piste audio dans {audio_path}.")
+        audio.export(audio_path, format="wav")
+
+        # Vérification si le fichier existe
+        if not os.path.exists(audio_path):
+            logging.error(f"Le fichier {audio_path} n'existe pas.")
+            raise HTTPException(status_code=404, detail=f"Le fichier {audio_path} n'existe pas.")
+
+        # Étape 1 : Diarisation
+        logging.debug(f"Démarrage de la diarisation du fichier {audio_path}")
+
+        with ProgressHook() as hook:
+            diarization = diarization_model(audio_path, hook=hook)
+
+        diarization_json = convert_tracks_to_json(diarization)
+        logging.debug(f"Résultat de la diarization {diarization_json}")
 
         # Streaming des résultats
         async def live_process_audio():
+            # Envoyer la diarisation complète d'abord
+            yield f"{json.dumps({'diarization': diarization_json})}\n"
+            await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
+    
             # Exporter les segments pour chaque locuteur
-            total_turns = len(list(diarization.itertracks(yield_label=True))) 
-            logging.debug(f"total_turns: {total_turns}")
+            total_chunks = len(list(diarization.itertracks(yield_label=True))) 
+            logging.debug(f"total_turns: {total_chunks}")
             
-            total_turns = len(list(diarization.itertracks(yield_label=True))) 
             turn_number = 0
             # for turn, _, speaker in tqdm(diarization.itertracks(yield_label=True), total=total_turns, desc="Processing turns"):
             for turn, _, speaker in diarization.itertracks(yield_label=True):
                 turn_number += 1
-                logging.debug(f"Tour {turn_number}/{total_turns}")
+                logging.debug(f"Tour {turn_number}/{total_chunks}")
 
                 # Étape 2 : Transcription pour chaque segment
                 start_ms = int(turn.start * 1000)  # Convertir de secondes en millisecondes
@@ -196,7 +259,6 @@ async def upload_file(file: UploadFile = File(...)):
                 await asyncio.sleep(0)  # Forcer l'envoi de chaque chunk
 
                 logging.debug(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
-                # sys.stdout.flush()  # Forcer l'envoi immédiat du segment
 
         # Retourner les résultats en streaming
         return StreamingResponse(live_process_audio(), media_type="application/json")
@@ -291,7 +353,6 @@ async def process_audio(file: UploadFile = File(...)):
             })
         logging.debug("Transcription terminée.")
 
-        # print(segments)
         return {"transcriptions": segments}
 
     finally:
@@ -299,3 +360,15 @@ async def process_audio(file: UploadFile = File(...)):
         if os.path.exists(audio_path):
             os.remove(audio_path)
             logging.debug(f"Fichier temporaire {audio_path} supprimé.")
+
+def convert_tracks_to_json(tracks):
+    # Liste pour stocker les segments formatés
+    formatted_segments = []
+
+    # Itérer sur les segments avec leurs labels
+    for turn, _, speaker in tracks.itertracks(yield_label=True):
+        segment = {"speaker": speaker, "start_time": turn.start, "end_time": turn.end}
+        formatted_segments.append(segment)
+
+    # Convertir la liste de segments en JSON
+    return json.dumps(formatted_segments)

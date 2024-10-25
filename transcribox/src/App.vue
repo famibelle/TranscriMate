@@ -1,138 +1,139 @@
 <template>
-  <div id="app">
-    <!-- Vue principale affichée après l'upload du fichier -->
-    <div v-if="file">
-      <div class="file-header">
-        <span>{{ file.name }}</span>
-        <div class="controls">
-          <button @click="openSettings">⚙️</button>
-          <button @click="removeFile">✕</button>
-        </div>
-
-        <!-- Fenêtre modale pour les paramètres de transcription -->
-        <div v-if="showSettings" class="settings-modal">
-        <div class="settings-content">
-          <h3>Paramètres de transcription</h3>
-          <label for="model-select">Choisir le modèle de transcription :</label>
-          <select id="model-select" v-model="selectedModel">
-            <option value="openai/whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
-            <option value="openai/whisper-large-v3">Whisper Large v3</option>
-            <option value="openai/whisper-tiny">Whisper Tiny</option>
-            <option value="openai/whisper-small">Whisper Small</option>
-            <option value="openai/whisper-medium">Whisper Medium</option>
-            <option value="openai/whisper-base">Whisper Base</option>
-            <option value="openai/whisper-large">Whisper Large</option>
-          </select>
-          <br /><br />
-          <button @click="saveSettings">Enregistrer</button>
-          <button @click="closeSettings">Annuler</button>
-        </div>
-      </div>        
-    </div>
-
-    <div class="audio-player">
-      <!-- Bouton de lecture -->
-      <button @click="togglePlay">
-        <span v-if="isPlaying">⏸️</span>
-        <span v-else>▶️</span>
-      </button>
-
-      <!-- Barre de progression -->
-      <input type="range" min="0" :max="audioDuration" v-model="currentTime" @input="seekAudio" />
-
-      <!-- Affichage du temps actuel et de la durée totale -->
-      <span>{{ formatTime(currentTime) }} / {{ formatTime(audioDuration) }}</span>
-    </div>
-
-      <!-- Liste des locuteurs et des segments de transcription -->
-      <div v-for="(segment, index) in transcriptions" :key="index" class="transcription-segment">
-        <div class="message">
-          <div class="message-header">
-            <span 
-              v-if="!segment.isEditing" 
-              class="speaker" 
-              @click="toggleSpeakerAudio(segment, index)" 
-              @contextmenu.prevent="enableEditMode(segment, $event)">
-              <span v-if="playingIndex === index">⏸️</span> 
-              <span v-if="!segment.isEditing">
-              {{ segment.speaker }}:
-              </span>
-            </span>
-            <input
-              v-else
-              class="edit-input"
-              type="text"
-              v-model="segment.speaker"
-              @blur="applySpeakerChange(segment)"
-              @keyup.enter="applySpeakerChange(segment)"
-            />
+  <div :class="{ dark: isDarkMode }">
+    <div id="app">
+      <!-- Vue principale affichée après l'upload du fichier -->
+      <div v-if="file">
+        <!-- Section fichier avec le même style que Statistiques -->
+        <div class="file-container">
+          <div class="file-header">📁 Fichier</div>
+          <div class="file-body">
+            <span>{{ file.name }}</span>
+            <div class="controls">
+              <button @click="openSettings">⚙️</button>
+              <button @click="removeFile">❌</button>
+              <button @click="toggleDarkMode">{{ isDarkMode ? "🌞" : "🌙" }}</button>
+            </div>
           </div>
 
-      <!-- Texte complet du segment entouré dans une bulle -->
-      <div class="message-body">
-          <!-- Contenu du message (transcription) -->
-            <div class="chunk-container">
-              <span 
-                v-for="(chunk, i) in segment.text.chunks" 
-                :key="i" 
-                class="chunk" 
-                @click="playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i)">
-                {{ chunk.text }}
-              </span>
+
+
+          <!-- Fenêtre modale pour les paramètres de transcription -->
+          <div v-if="showSettings" class="settings-modal">
+            <div class="settings-content">
+              <h3>Paramètres de transcription</h3>
+              <label for="model-select">Choisir le modèle de transcription :</label>
+              <select id="model-select" v-model="selectedModel">
+                <option value="openai/whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
+                <option value="openai/whisper-large-v3">Whisper Large v3</option>
+                <option value="openai/whisper-tiny">Whisper Tiny</option>
+                <option value="openai/whisper-small">Whisper Small</option>
+                <option value="openai/whisper-medium">Whisper Medium</option>
+                <option value="openai/whisper-base">Whisper Base</option>
+                <option value="openai/whisper-large">Whisper Large</option>
+              </select>
+              <br /><br />
+              <button @click="saveSettings">Enregistrer</button>
+              <button @click="closeSettings">Annuler</button>
             </div>
-      </div>
-    </div>
-  </div>
+          </div>
+        </div>
 
-  
-  <div>
-    <!-- Barre de progression ASCII pour la transcription globale -->
-    <pre>{{ updateAsciiProgressBar() }}</pre>
-    <p>{{ transcriptionProgress.toFixed(2) }}% transcrit</p> <!-- Montre le pourcentage -->
-  </div>
+        <!-- Section audio-player avec style similaire à stats-container -->
+        <div class="audio-player-container">
+          <div class="audio-player-header">🎵 Lecture Audio</div>
+          <div class="audio-player-body">
+            <!-- Bouton de lecture -->
+            <button @click="togglePlay">
+              <span v-if="isPlaying">⏸️</span>
+              <span v-else>▶️</span>
+            </button>
+            <!-- Barre de progression -->
+            <input type="range" min="0" :max="audioDuration" v-model="currentTime" @input="seekAudio" />
+            <!-- Affichage du temps actuel et de la durée totale -->
+            <span>{{ formatTime(currentTime) }} / {{ formatTime(audioDuration) }}</span>
+          </div>
+        </div>
 
-      <!-- Section pour afficher les statistiques de temps de parole -->
-      <div class="stats-container">
-        <h3>📊 Détection</h3>
-        <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
-        <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
+        <!-- Section de la barre de progression ASCII pour la transcription globale -->
+        <div class="progress-bar-container">
+          <div class="progress-bar-header">📈 Progression de la Transcription</div>
+          <div class="progress-bar-body">
+            <!-- Barre de progression ASCII pour la transcription globale -->
+            <pre>{{ updateAsciiProgressBar() }}</pre>
+            <p>{{ transcriptionProgress.toFixed(2) }}% transcrit</p> <!-- Montre le pourcentage -->
+          </div>
+        </div>
 
-        <h3>👥 Répartition temps de parole</h3>
-        <ul>
-          <li v-for="(speakerStat, index) in speechStats.speakers" :key="index">
-            {{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}%
-          </li>
-        </ul>
+        <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
+        <div class="conversation-container" :class="{ dark: isDarkMode }">
+          <div class="conversation-header">💬 Conversation</div>
+          <div class="conversation-body">
+            <div v-for="(segment, index) in transcriptions" :key="index" class="message"
+              :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
+              <div class="message-header">
+                <span v-if="!segment.isEditing" class="speaker" @click="toggleSpeakerAudio(segment, index)"
+                  @contextmenu.prevent="enableEditMode(segment, $event)">
+                  <span v-if="playingIndex === index">⏸️</span>
+                  {{ segment.speaker }}:
+                </span>
+                <input v-else class="edit-input" type="text" v-model="segment.speaker"
+                  @blur="applySpeakerChange(segment)" @keyup.enter="applySpeakerChange(segment)" />
+              </div>
+
+              <!-- Texte complet du segment entouré dans une bulle -->
+              <div class="message-body">
+                <div class="chunk-container">
+                  <span v-for="(chunk, i) in segment.text.chunks" :key="i" class="chunk"
+                    @click="playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i)">
+                    {{ chunk.text }}<span v-if="i < segment.text.chunks.length - 1"> </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+
+
+
+
+
+        <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
+        <div class="stats-container">
+          <div class="stats-header">📊 Statistiques</div>
+          <div class="stats-body">
+            <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
+            <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
+
+            <div class="stats-subheader">👥 Répartition temps de parole</div>
+            <ul>
+              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index">
+                {{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du temps total
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
+        <div v-if="transcriptions.length > 0" class="transcription-full-container">
+          <div class="transcription-header">📝 Transcription complète</div>
+          <textarea v-model="fullTranscription" class="transcription-textarea" readonly
+            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
+          <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
+        </div>
       </div>
 
-      <!-- Textarea pour l'ensemble de la transcription -->
-      <div v-if="transcriptions.length > 0" class="transcription-full">
-        <h3>Transcription complète</h3>
-        <textarea v-model="fullTranscription" readonly></textarea>
-        <button @click="copyToClipboard">Copier</button>
+      <!-- Interface d'upload si aucun fichier n'est sélectionné -->
+      <div v-else class="upload-container">
+        <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
+          <p>🎵 Déposez votre fichier audio ou vidéo ici</p>
+          <p>ou</p>
+          <button @click.stop="triggerFileInput">Sélectionnez un fichier</button>
+          <p>Formats supportés : MP3, MP4, WAV, WebM</p>
+        </div>
+        <input type="file" ref="fileInput" @change="onFileChange" accept=".mp3,.mp4,.wav,.webm" style="display: none" />
       </div>
-      </div>
-    
-    <!-- Interface d'upload si aucun fichier n'est sélectionné -->
-    <div v-else class="upload-container">
-      <div 
-        class="upload-box"
-        @dragover.prevent
-        @drop.prevent="handleDrop"
-        @click="triggerFileInput"
-      >
-        <p>🎵 Déposez votre fichier audio ou vidéo ici</p>
-        <p>ou</p>
-        <button @click.stop="triggerFileInput">Sélectionnez un fichier</button>
-        <p>Formats supportés : MP3, MP4, WAV, WebM</p>
-      </div>
-      <input
-        type="file"
-        ref="fileInput"
-        @change="onFileChange"
-        accept=".mp3,.mp4,.wav,.webm"
-        style="display: none"
-      />
     </div>
   </div>
 </template>
@@ -141,6 +142,8 @@
 export default {
   data() {
     return {
+      speakerColors: {}, // Associera chaque locuteur à une couleur unique
+      isDarkMode: false, // Contrôle du mode sombre
       transcribedTime: 0,  // Temps total déjà transcrit en secondes
       transcriptionProgress: 0,  // Progression globale en pourcentage
       playingIndex: null,  // Index du speaker en train d'être lu
@@ -157,7 +160,7 @@ export default {
         totalDuration: 0,  // Durée totale par défaut
         speakers: []       // Tableau vide pour la répartition des temps de parole
       },
-        oldSpeakerName: '',  // Stocker l'ancien nom du speaker avant l'édition
+      oldSpeakerName: '',  // Stocker l'ancien nom du speaker avant l'édition
       currentAudio: null, // Pour garder une référence à l'audio en cours
       currentChunkIndex: null, // Pour garder une trace du chunk en cours de lecture
     };
@@ -177,11 +180,34 @@ export default {
   },
 
   methods: {
+    getSpeakerColor(speaker) {
+      // Vérifie si une couleur est déjà générée pour ce locuteur
+      if (!this.speakerColors[speaker]) {
+        this.speakerColors[speaker] = this.generateBaseColor(speaker);
+      }
+      // Retourne la couleur ajustée pour le mode actif
+      return this.adjustColorForMode(this.speakerColors[speaker]);
+    },
+    generateBaseColor() {
+      // Génère une teinte unique pour chaque locuteur en utilisant HSL
+      const hue = Math.floor(Math.random() * 360);
+      return `hsl(${hue}, 70%, 50%)`; // Luminosité moyenne initiale
+    },
+    adjustColorForMode(color) {
+      // Modifie la luminosité pour s'adapter au mode sombre ou clair
+      const lightness = this.isDarkMode ? '30%' : '85%'; // Plus sombre en mode sombre
+      return color.replace(/(\d+%)$/, lightness); // Ajuste la dernière valeur HSL
+    },
+
+    toggleDarkMode() {
+      this.isDarkMode = !this.isDarkMode;
+    },
+
     loadAudioMetadata(audioUrl) {
-    const audio = new Audio(audioUrl);
-    audio.onloadedmetadata = () => {
-      this.audioDuration = audio.duration;  // Récupérer la durée totale de l'audio
-    };
+      const audio = new Audio(audioUrl);
+      audio.onloadedmetadata = () => {
+        this.audioDuration = audio.duration;  // Récupérer la durée totale de l'audio
+      };
     },
 
     // Méthode à appeler quand la transcription avance
@@ -457,14 +483,23 @@ export default {
           // Traiter chaque segment JSON
           for (const line of lines) {
             if (line.trim()) {
-              console.log("Segment reçu:", line);  // Ajout du log pour chaque segment reçu
-              const segment = JSON.parse(line);  // Convertir le JSON en objet
-              // Créer un nouveau tableau à chaque ajout
-              this.transcriptions.push(segment);  // Ajouter le segment au tableau des transcriptions
-              this.$nextTick(() => {
-                console.log("DOM mis à jour avec le nouveau segment");
-                console.log("Transcription mise à jour:", this.transcriptions);  // Log pour vérifier la mise à jour
-              });  // S'assurer que Vue met à jour le DOM après chaque ajout
+              const data = JSON.parse(line);
+              // Vérifie si les données contiennent 'diarization'
+              if (data.diarization) {
+                this.diarization = data.diarization; // Stocke les données de la diarisation complète
+                console.log("Diraization reçu:", this.diarization);  // Ajout du log pour chaque segment reçu
+              }
+              else {
+                // Ajoute les segments de transcription
+                console.log("Segment reçu:", line);  // Ajout du log pour chaque segment reçu
+                const segment = JSON.parse(line);  // Convertir le JSON en objet
+                // Créer un nouveau tableau à chaque ajout
+                this.transcriptions.push(segment);  // Ajouter le segment au tableau des transcriptions
+                this.$nextTick(() => {
+                  console.log("DOM mis à jour avec le nouveau segment");
+                  console.log("Transcription mise à jour:", this.transcriptions);  // Log pour vérifier la mise à jour
+                });  // S'assurer que Vue met à jour le DOM après chaque ajout
+              }
             }
           }
         }
@@ -479,8 +514,48 @@ export default {
 };
 </script>
 
-<style>
+<style scoped>
 /* Style de l'interface d'upload */
+
+
+/* Fond de page et bordures en mode clair */
+html,
+body {
+  background-color: #ffffff;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+
+/* Mode sombre global */
+.dark html,
+.dark body {
+  background-color: #121212;
+  /* Fond sombre pour toute la page */
+  color: #e0e0e0;
+  /* Texte clair pour le mode sombre */
+}
+
+/* Bordures pour tous les conteneurs principaux en mode sombre */
+.dark .file-container,
+.dark .stats-container,
+.dark .transcription-full-container,
+.dark .audio-player-container,
+.dark .progress-bar-container,
+.dark .conversation-container {
+  border-color: #555;
+  /* Bordure sombre pour s'adapter au mode dark */
+  background-color: #1e1e1e;
+  /* Fond sombre uniforme */
+}
+
+/* Bordures génériques pour tout autre élément */
+.dark * {
+  border-color: #555 !important;
+}
+
+
+
 .upload-container {
   display: flex;
   justify-content: center;
@@ -540,9 +615,9 @@ button:hover {
 }
 
 .audio-player {
-  display: flex;
   align-items: center;
   padding: 10px;
+  display: flex;
 }
 
 .audio-player input[type="range"] {
@@ -559,42 +634,14 @@ button:hover {
   margin-bottom: 10px;
 }
 
-.message-body {
-  position: relative;
-  background-color: #e1ffc7;
-  padding: 3px 10px 10px 10px; /* 3px en haut, 10px sur les côtés et en bas */
-  border-radius: 8px;
-  display: inline-block;
-  max-width: 90%;
-  margin-bottom: 10px;
-  font-family: 'Roboto', sans-serif;
-}
-
-/* Ajout d'une petite flèche à gauche de la bulle */
-.message-body::before {
-  content: "";
-  position: absolute;
-  top: 10px; /* Ajuste pour positionner la flèche verticalement */
-  left: -10px; /* Ajuste pour la position horizontale */
-  border-width: 10px;
-  border-style: solid;
-  border-color: transparent #e1ffc7 transparent transparent; /* Flèche triangulaire vers la gauche */
-}
-
 .message-text {
   font-family: 'Roboto', sans-serif;
   font-size: 14px;
   margin: 0;
 }
 
-.chunk-container {
-  display: flex;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
 .chunk {
-  background-color: #e1ffc7;
+  font-family: 'Roboto', sans-serif;
   border-radius: 2px;
   cursor: pointer;
   font-size: 14px;
@@ -602,35 +649,37 @@ button:hover {
 }
 
 .chunk:hover {
-  background-color: yellow; /* Ajouter un surlignage doux lors du hover */
+  background-color: yellow;
+  /* Ajouter un surlignage doux lors du hover */
 }
 
-.chunk:active {
-  background-color: #a5d096;  /* Changement de couleur au clic */
-}
 
 /* Style pour rendre le texte du speaker cliquable */
 .speaker {
+  font-family: 'Roboto', sans-serif;
   cursor: pointer;
-  font-weight: bold;  /* Mettre en gras par défaut */
+  font-weight: bold;
+  /* Mettre en gras par défaut */
   position: relative;
-  background-color: #e7ffc7;
   border-radius: 8px;
   display: inline-block;
   max-width: 90%;
 }
 
 .speaker:hover {
-  background-color: rgb(0, 255, 76); /* Surlignage à la manière d'un stabilo lorsqu'actif */
+  background-color: rgb(0, 255, 76);
+  /* Surlignage à la manière d'un stabilo lorsqu'actif */
 }
 
 /* Ajouter l'emoji ▶️ lors du survol */
 .speaker:hover::before {
   content: '▶️ ';
   font-size: 16px;
-  color: inherit; /* Optionnel, pour garder la même couleur que le speaker */
+  color: inherit;
+  /* Optionnel, pour garder la même couleur que le speaker */
   position: relative;
-  left: 5px; /* Ajuste la distance entre le texte et l'emoji */
+  left: 5px;
+  /* Ajuste la distance entre le texte et l'emoji */
 }
 
 textarea {
@@ -644,10 +693,456 @@ textarea {
   resize: none;
 }
 
-/* Style pour le champ d'édition */
+
+.dark-mode-toggle {
+  margin-top: 20px;
+}
+
+/* Mode sombre */
+.dark {
+  background-color: #121212;
+  color: #ffffff;
+}
+
+.dark .audio-player,
+.dark .message-body .dark .controls,
+.dark .transcriptions,
+.dark .copy-button,
+.dark .statistics {
+  color: #ffffff;
+  border-color: #444;
+}
+
+.dark input[type="range"] {
+  background-color: #444;
+  color: #ffffff;
+}
+
+/* Applique un fond sombre pour .dark */
+.dark .progress-bar-container,
+.dark .audio-player-container,
+.dark .conversation-container {
+  background-color: #000000;
+  border-color: #555;
+  color: #000000;
+}
+
+/* Style pour les headers en mode sombre */
+.dark .progress-bar-header,
+.dark .audio-player-header,
+.dark .conversation-header {
+  color: #e0e0e0;
+  border-bottom-color: #000000;
+}
+
+/* Ajuste les couleurs des sections internes */
+.dark .progress-bar-body pre,
+.dark .audio-player-body,
+.dark .conversation-body {
+  background-color: #000000;
+  color: #e0e0e0;
+}
+
+/* Surlignage des chunks en mode sombre */
+.dark .chunk-container .chunk:hover {
+  background-color: #555;
+}
+
+/* Couleur de texte adaptative en fonction du mode */
+.dark .conversation-container,
+.dark .stats-container,
+.dark .transcription-full-container,
+.dark .audio-player-container,
+.dark .progress-bar-container {
+  color: #e0e0e0;
+  /* Texte en blanc pour le mode sombre */
+}
+
+
+
+/* Mode sombre pour .file-container et ses parties */
+.dark .file-container {
+  border: 1px solid #555;
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+}
+
+.dark .file-header,
+.dark .file-body {
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+}
+
+.dark .file-header {
+  border-bottom: 1px solid #555;
+}
+
+/* Boutons de contrôle en mode sombre */
+.controls button {
+  color: inherit;
+}
+
+.controls button:hover {
+  color: #aaa;
+}
+
+/* Couleur de texte par défaut pour le mode clair */
+.conversation-container,
+.stats-container,
+.transcription-full-container,
+.audio-player-container,
+.progress-bar-container {
+  color: #333;
+  /* Texte en noir pour le mode clair */
+}
+
+
+.stats-container {
+  border: 1px solid #333;
+  width: 80%;
+  /* Définit la largeur à 80% de la page */
+  max-width: 800px;
+  /* Optionnel : limite la largeur maximale pour les grands écrans */
+  margin: 20px auto;
+  /* Centre le cadre horizontalement */
+  padding: 10px;
+  font-family: monospace;
+}
+
+.stats-header {
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
+.stats-body {
+  padding: 5px 0;
+}
+
+.stats-subheader {
+  font-weight: bold;
+  margin-top: 10px;
+  border-top: 1px solid #333;
+  padding-top: 5px;
+}
+
+ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+li {
+  margin: 5px 0;
+}
+
+
+.transcription-full-container {
+  border: 1px solid #333;
+  width: 80%;
+  /* Largeur de 80% de la page pour centrer et harmoniser */
+  max-width: 800px;
+  /* Largeur maximale pour grands écrans */
+  margin: 20px auto;
+  padding: 10px;
+  font-family: monospace;
+}
+
+.transcription-header {
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
+.transcription-textarea {
+  width: 80%;
+  height: 300px;
+  margin: 10px 0;
+  padding: 10px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  color: #333;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: none;
+  align-items: stretch;
+  justify-content: center;
+  display: flex;
+}
+
+.copy-button {
+  display: inline-block;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: #fff;
+  background-color: #007bff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.copy-button:hover {
+  background-color: #0056b3;
+}
+
+.message-container {
+  border: 1px solid #333;
+  width: 80%;
+  /* Largeur de 80% de la page pour un alignement harmonieux */
+  max-width: 800px;
+  /* Limite maximale de largeur */
+  margin: 15px auto;
+  /* Espacement vertical entre chaque message */
+  padding: 10px;
+  font-family: monospace;
+  background-color: #f9f9f9;
+  /* Fond légèrement coloré pour l'effet bulle */
+  border-radius: 8px;
+  /* Coins arrondis pour un effet de bulle */
+}
+
+.message-body {
+  padding: 5px 0;
+}
+
+.chunk-container .chunk {
+  display: inline-block;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.chunk-container .chunk:hover {
+  background-color: #e0e0e0;
+  /* Surlignage au survol */
+  border-radius: 4px;
+}
+
 .edit-input {
+  width: 100%;
+  padding: 4px;
+  font-size: 14px;
+  font-family: monospace;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+/* Couleurs pour chaque locuteur */
+.speaker-0 .message-body {
+  background-color: #ffe0e0;
+  /* Rouge clair */
+}
+
+.speaker-1 .message-body {
+  background-color: #09886c;
+  /* Vert clair */
+}
+
+.speaker-2 .message-body {
+  background-color: #08089c;
+  /* Bleu clair */
+}
+
+.speaker-3 .message-body {
+  background-color: #fff0b3;
+  /* Jaune clair */
+}
+
+.speaker-4 .message-body {
+  background-color: #b4064c;
+  /* Rose clair */
+}
+
+.message-body {
+  padding: 5px;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+.conversation-container {
+  border: 1px solid #333;
+  width: 80%;
+  /* Largeur de 80% de la page */
+  max-width: 800px;
+  /* Limite maximale de largeur */
+  margin: 20px auto;
+  padding: 10px;
+  font-family: monospace;
+  background-color: #f9f9f9;
+  /* Fond clair */
+  border-radius: 8px;
+}
+
+.conversation-header {
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 15px;
+}
+
+.conversation-body {
+  padding: 5px 0;
+}
+
+.message {
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.message-header {
+  font-weight: bold;
+  color: #333;
+  /* Conserve un texte lisible */
+  border-radius: 4px 4px 0 0;
+  padding: 5px;
+}
+
+.message-body {
+  padding: 5px;
+  border-radius: 0 0 4px 4px;
+}
+
+.chunk-container .chunk {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.chunk-container .chunk:hover {
+  background-color: #e0e0e0;
+  /* Surlignage au survol */
+  border-radius: 4px;
+}
+
+.edit-input {
+  width: 100%;
+  padding: 4px;
+  font-size: 14px;
+  font-family: monospace;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.audio-player-container {
+  border: 1px solid #333;
+  width: 80%;
+  /* Largeur de 80% de la page */
+  max-width: 800px;
+  /* Limite maximale de largeur */
+  margin: 20px auto;
+  padding: 10px;
+  font-family: monospace;
+  background-color: #f9f9f9;
+  /* Fond clair */
+  border-radius: 8px;
+}
+
+.audio-player-header {
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
+.audio-player-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audio-player-body button {
+  font-size: 20px;
+  /* Taille du bouton de lecture */
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.audio-player-body input[type="range"] {
+  flex-grow: 1;
+  height: 4px;
+  background: #ddd;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.audio-player-body span {
+  font-size: 14px;
+  color: #333;
+}
+
+.progress-bar-container {
+  border: 1px solid #333;
+  width: 80%;
+  /* Largeur de 80% de la page */
+  max-width: 800px;
+  /* Limite maximale de largeur */
+  margin: 20px auto;
+  padding: 10px;
+  font-family: monospace;
+  background-color: #f9f9f9;
+  /* Fond clair */
+  border-radius: 8px;
+}
+
+.progress-bar-header {
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
+.progress-bar-body {
+  padding: 5px 0;
+}
+
+.progress-bar-body pre {
   font-size: 16px;
-  padding: 2px;
-  margin-left: 5px;
+  color: #333;
+  background-color: #e0e0e0;
+  /* Fond légèrement plus sombre pour contraster */
+  padding: 5px;
+  border-radius: 4px;
+}
+
+.progress-bar-body p {
+  font-size: 14px;
+  color: #333;
+  margin-top: 10px;
+}
+
+.file-container {
+  border: 1px solid #333;
+  width: 80%;
+  /* Largeur de 80% de la page */
+  max-width: 800px;
+  /* Limite maximale de largeur */
+  margin: 20px auto;
+  padding: 10px;
+  font-family: monospace;
+  border-radius: 8px;
+}
+
+.file-header {
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
+.file-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.controls button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 5px;
 }
 </style>
