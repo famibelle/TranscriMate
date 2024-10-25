@@ -142,6 +142,7 @@
 export default {
   data() {
     return {
+      diarization: null,  // Stockage des données de diarisation complètes
       speakerColors: {}, // Associera chaque locuteur à une couleur unique
       isDarkMode: false, // Contrôle du mode sombre
       transcribedTime: 0,  // Temps total déjà transcrit en secondes
@@ -268,7 +269,6 @@ export default {
       // Logique supplémentaire pour enregistrer les paramètres si nécessaire
     },
 
-
     // Formater le temps en minutes et secondes
     formatTime(seconds) {
       const minutes = Math.floor(seconds / 60);
@@ -321,46 +321,59 @@ export default {
           seg.speaker = newSpeaker;  // Mettre à jour le speaker
         }
       });
-      segment.isEditing = false;  // Désactiver le mode édition
 
+      // Mettre à jour tous les segments dans diarization avec le même ancien nom de speaker
+      if (this.diarization) {
+        this.diarization.forEach(entry => {
+          if (entry.speaker === oldSpeaker) {
+            entry.speaker = newSpeaker;
+          }
+        });
+      }
+
+      segment.isEditing = false;  // Désactiver le mode édition
       this.calculateSpeechStats();  // Recalculer les statistiques après la modification
     },
 
-    // Méthode pour calculer les temps de parole des speakers
+    // Méthode pour calculer les temps de parole des locuteurs
     calculateSpeechStats() {
       const stats = {};
       let totalDuration = 0; // Variable pour la durée totale de l'audio
 
-      // Calculer le temps de parole pour chaque locuteur et la durée totale
-      this.transcriptions.forEach(segment => {
-        const speaker = segment.speaker;
-        const duration = segment.end_time - segment.start_time; // Durée du segment
-        totalDuration += duration; // Ajouter à la durée totale
+      // Utiliser les données de this.diarization pour calculer le temps de parole de chaque locuteur
+      console.log("Calcul pour la diarization :", this.diarization);
+      this.diarization.forEach(entry => {
+        const speaker = entry.speaker;
+        const duration = entry.end_time - entry.start_time; // Durée du segment
+        totalDuration += duration; // Ajouter à la durée totale de l'audio
 
         if (!stats[speaker]) {
-          stats[speaker] = 0;  // Initialiser à zéro si ce speaker n'a pas encore été ajouté
+          stats[speaker] = 0;  // Initialiser le compteur pour chaque locuteur
         }
-        stats[speaker] += duration;  // Ajouter la durée du segment au speaker
+        stats[speaker] += duration;  // Ajouter la durée du segment au temps total du locuteur
+        console.log("speaker :", speaker);
+        console.log("duration :", duration);
       });
 
-      // Calculer les pourcentages pour chaque locuteur
+      // Calculer les pourcentages de temps de parole pour chaque locuteur
       const percentageStats = Object.entries(stats).map(([speaker, time]) => {
         return {
           speaker: speaker,
-          percentage: (time / totalDuration) * 100  // Calculer le pourcentage
+          percentage: (time / totalDuration) * 100  // Calcul du pourcentage de temps de parole
         };
       });
 
       // Trier les locuteurs par ordre décroissant de temps de parole
       percentageStats.sort((a, b) => b.percentage - a.percentage);
 
-      // Stocker les statistiques mises à jour
+      // Mettre à jour les statistiques avec les nouvelles données
       this.speechStats = {
-        totalDuration: totalDuration,  // Durée totale de l'audio
-        speakers: percentageStats,  // Répartition des locuteurs et pourcentages
-        totalSpeakers: percentageStats.length  // Nombre de locuteurs identifiés
+        totalDuration: totalDuration,         // Durée totale de l'audio
+        speakers: percentageStats,            // Répartition des locuteurs et pourcentages
+        totalSpeakers: percentageStats.length // Nombre de locuteurs identifiés
       };
     },
+
 
     // Méthode pour jouer l'audio d'un segment complet
     playAudio(audioUrl) {
@@ -486,8 +499,10 @@ export default {
               const data = JSON.parse(line);
               // Vérifie si les données contiennent 'diarization'
               if (data.diarization) {
-                this.diarization = data.diarization; // Stocke les données de la diarisation complète
-                console.log("Diraization reçu:", this.diarization);  // Ajout du log pour chaque segment reçu
+                this.diarization = JSON.parse(data.diarization); // Stocke les données de la diarisation complète
+                console.log(typeof this.diarization, this.diarization)
+                this.totalDuration = this.diarization.reduce((acc, entry) => acc + (entry.end_time - entry.start_time), 0);
+                this.calculateSpeechStats();  // Calculer les statistiques à réceptions des infos de diarization
               }
               else {
                 // Ajoute les segments de transcription
@@ -495,6 +510,13 @@ export default {
                 const segment = JSON.parse(line);  // Convertir le JSON en objet
                 // Créer un nouveau tableau à chaque ajout
                 this.transcriptions.push(segment);  // Ajouter le segment au tableau des transcriptions
+
+                // Mettre à jour la progression
+                const processedDuration = this.transcriptions.reduce((acc, seg) => acc + (seg.end_time - seg.start_time), 0);
+                console.log("processedDuration: ", processedDuration);  // Ajout du log pour chaque segment reçu
+                console.log("this.totalDuration: ", this.totalDuration)
+                this.transcriptionProgress = (processedDuration / this.totalDuration) * 100;
+
                 this.$nextTick(() => {
                   console.log("DOM mis à jour avec le nouveau segment");
                   console.log("Transcription mise à jour:", this.transcriptions);  // Log pour vérifier la mise à jour
@@ -504,7 +526,6 @@ export default {
           }
         }
         console.log("Streaming terminé.");
-        this.calculateSpeechStats();  // Calculer les statistiques après réception des transcriptions
 
       } catch (error) {
         console.error("Erreur lors de l'upload ou récupération des transcriptions", error);
