@@ -201,6 +201,15 @@ async def upload_file(file: UploadFile = File(...)):
 
         with ProgressHook() as hook:
             diarization = diarization_model(audio_path, hook=hook)
+            # Envoyer la progression du hook
+            # yield f"data: {json.dumps({'progress': hook.progress})}\n\n"
+            # Calculer le pourcentage de progression
+            # progress_percentage = (hook.progress.completed / hook.progress.total) * 100
+            print("Attributs et méthodes de hook.progress:", dir(hook.progress))
+            print("Dictionnaire des attributs de hook:", hook.__dict__)
+            for task in hook.progress.tasks:
+                progress_percentage = (task.completed / task.total) * 100 if task.total else 0
+                print(f"Progression de la tâche '{task.description}': {progress_percentage:.2f}%")
 
         diarization_json = convert_tracks_to_json(diarization)
         logging.debug(f"Résultat de la diarization {diarization_json}")

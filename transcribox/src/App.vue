@@ -15,8 +15,6 @@
             </div>
           </div>
 
-
-
           <!-- Fenêtre modale pour les paramètres de transcription -->
           <div v-if="showSettings" class="settings-modal">
             <div class="settings-content">
@@ -95,10 +93,6 @@
 
 
 
-
-
-
-
         <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
         <div class="stats-container">
           <div class="stats-header">📊 Statistiques</div>
@@ -122,6 +116,7 @@
             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
           <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
         </div>
+
       </div>
 
       <!-- Interface d'upload si aucun fichier n'est sélectionné -->
@@ -374,7 +369,6 @@ export default {
       };
     },
 
-
     // Méthode pour jouer l'audio d'un segment complet
     playAudio(audioUrl) {
       const audio = new Audio(audioUrl);  // Créer une instance d'Audio avec l'URL du segment
@@ -466,6 +460,15 @@ export default {
 
     // Envoie le fichier au backend et récupère les transcriptions
     async uploadFile() {
+      // Réinitialiser toutes les variables liées à la transcription
+      this.transcriptions = [];         // Réinitialise la liste des transcriptions
+      this.fullTranscription = '';      // Réinitialise la transcription complète
+      this.currentAudio = null;         // Réinitialise l'audio en cours
+      this.currentChunkIndex = null;    // Réinitialise l'index du chunk
+      this.speechStats = {};            // Réinitialise les statistiques de parole
+      this.diarization = null;          // Réinitialise les données de diarisation
+      this.transcriptionProgress = 0;   // Réinitialise la barre de progression      
+      
       const formData = new FormData();
       formData.append('file', this.file);
 
@@ -858,54 +861,116 @@ li {
 }
 
 
+/* Conteneur principal */
 .transcription-full-container {
-  border: 1px solid #333;
-  width: 80%;
-  /* Largeur de 80% de la page pour centrer et harmoniser */
-  max-width: 800px;
-  /* Largeur maximale pour grands écrans */
+  background-color: #2b2b2b;
+  /* Couleur de fond sombre */
+  border: 1px solid #3e3e3e;
+  /* Bordure avec une couleur légèrement plus claire */
+  border-radius: 8px;
+  /* Angles arrondis pour un style moderne */
+  padding: 20px;
+  /* Espacement interne */
+  max-width: 80%;
+  /* Limite la largeur */
   margin: 20px auto;
-  padding: 10px;
-  font-family: monospace;
+  /* Centré horizontalement */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  /* Légère ombre pour effet de profondeur */
 }
 
+/* Titre de la transcription */
 .transcription-header {
-  font-weight: bold;
-  border-bottom: 1px solid #333;
-  padding-bottom: 5px;
-  margin-bottom: 10px;
+  font-size: 1em;
+  /* Taille plus grande pour le titre */
+  color: #ffffff;
+  /* Couleur blanche du texte pour le mode sombre */
+  text-align: center;
+  /* Centré horizontalement */
+  margin-bottom: 15px;
+  /* Espacement sous le titre */
 }
 
+/* Zone de texte pour la transcription */
 .transcription-textarea {
-  width: 80%;
-  height: 300px;
-  margin: 10px 0;
+  width: 100%;
+  /* Prend toute la largeur du conteneur */
+  background-color: #1e1e1e;
+  /* Fond plus sombre pour le texte */
+  color: #ffffff;
+  /* Couleur du texte en blanc pour un bon contraste */
+  border: 1px solid #3e3e3e;
+  /* Bordure légère */
+  border-radius: 5px;
+  /* Angles arrondis */
   padding: 10px;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 14px;
-  color: #333;
-  background-color: #f9f9f9;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  /* Espacement interne */
+  font-family: 'Courier New', monospace;
+  /* Police monospaced pour style de code */
+  font-size: 1em;
+  /* Taille normale du texte */
   resize: none;
-  align-items: stretch;
-  justify-content: center;
-  display: flex;
+  /* Désactive le redimensionnement manuel */
+  overflow-y: hidden;
+  /* Cacher la barre de défilement verticale */
+  box-sizing: border-box;
+  /* Inclut la bordure dans la largeur totale */
 }
 
+/* Bouton Copier */
 .copy-button {
-  display: inline-block;
-  padding: 8px 16px;
-  font-size: 14px;
-  color: #fff;
   background-color: #007bff;
+  /* Couleur bleue pour le bouton */
+  color: white;
+  /* Texte en blanc */
   border: none;
-  border-radius: 4px;
+  /* Pas de bordure */
+  border-radius: 5px;
+  /* Angles arrondis */
+  padding: 10px 20px;
+  /* Espacement interne */
+  font-size: 1.1em;
+  /* Taille un peu plus grande */
+  margin-top: 15px;
+  /* Espacement au-dessus du bouton */
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  /* Curseur pointeur pour indiquer un bouton cliquable */
+  display: block;
+  /* Bouton affiché comme bloc */
+  width: 100%;
+  /* Le bouton prend toute la largeur */
+  text-align: center;
+  /* Texte centré dans le bouton */
 }
 
+/* Effet de survol du bouton */
 .copy-button:hover {
+  background-color: #0056b3;
+  /* Couleur plus foncée au survol */
+}
+
+/* Styles pour le mode clair */
+.light-mode .transcription-full-container {
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+}
+
+.light-mode .transcription-header {
+  color: #333;
+}
+
+.light-mode .transcription-textarea {
+  background-color: #ffffff;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.light-mode .copy-button {
+  background-color: #007bff;
+  color: white;
+}
+
+.light-mode .copy-button:hover {
   background-color: #0056b3;
 }
 
@@ -1165,5 +1230,36 @@ li {
   cursor: pointer;
   font-size: 18px;
   padding: 5px;
+}
+
+.progress-bar-container {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background-color: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress {
+  height: 100%;
+  background-color: #4caf50;
+  /* Couleur de la barre de progression */
+  transition: width 0.3s;
+  /* Animation douce */
+}
+
+
+.highlight {
+  background-color: #d1e7dd;
+  /* Couleur de surbrillance légère */
+  font-weight: bold;
+  /* Texte en gras pendant la lecture */
+  color: #333;
+  /* Couleur du texte plus sombre */
 }
 </style>
