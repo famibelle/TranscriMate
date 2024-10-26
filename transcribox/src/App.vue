@@ -382,9 +382,30 @@ export default {
 
     // Méthode pour copier la transcription complète dans le presse-papiers
     copyToClipboard() {
-      navigator.clipboard.writeText(this.fullTranscription)
-        .then(() => alert('Texte copié dans le presse-papiers !'))
-        .catch(err => console.error('Erreur lors de la copie :', err));
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(this.fullTranscription)
+          .then(() => {
+            console.log("Texte copié dans le presse-papier !");
+          })
+          .catch(err => {
+            console.error("Erreur lors de la copie du texte :", err);
+          });
+      } else {
+        // Alternative de copie avec un champ texte temporaire
+        const textarea = document.createElement("textarea");
+        textarea.value = this.fullTranscription;
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand("copy");
+          console.log("Texte copié dans le presse-papier !");
+        } catch (err) {
+          console.error("Erreur lors de la copie du texte :", err);
+        }
+        document.body.removeChild(textarea);
+      }
     },
 
     // Méthode pour lire un chunk spécifique
@@ -843,6 +864,7 @@ textarea {
 
 .stats-container {
   border: 1px solid #333;
+  border-radius: 10px;
   width: 80%;
   /* Définit la largeur à 80% de la page */
   max-width: 800px;
@@ -883,6 +905,7 @@ li {
 
 /* Conteneur principal */
 .transcription-full-container {
+  border-radius: 10px;
   border: 1px solid #333;
   width: 80%;
   /* Définit la largeur à 80% de la page */

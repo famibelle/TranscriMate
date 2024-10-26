@@ -41,6 +41,8 @@ HF_cache = '/mnt/.cache/'
 Model_dir = '/mnt/Models'
 
 HUGGING_FACE_KEY =  os.environ.get("HuggingFace_API_KEY")
+server_url = os.getenv("SERVER_URL")
+
 
 # Dossier pour les transcriptions
 output_dir = "Transcriptions"
@@ -100,6 +102,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     # allow_origins=["http://localhost:8080/"],  # URL de Vue.js
+    # allow_origins=[f"{server_url}:8080"],  # URL de Vue.js
     allow_origins=["*"],  # URL de Vue.js
     allow_credentials=True,
     allow_methods=["*"],
@@ -193,6 +196,7 @@ async def upload_file(file: UploadFile = File(...)):
         elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
             logging.debug(f"fichier vidéo détecté: {file_extension}.")
             video_clip = VideoFileClip(file_path)
+            logging.debug("Extraction Audio démarrée ...")
             audio = AudioSegment.from_file(file_path, format=file_type.extension)
 
         logging.debug(f"Conversion du {file.filename} en mono 16kHz.")
@@ -271,7 +275,7 @@ async def upload_file(file: UploadFile = File(...)):
                     "text": transcription,
                     "start_time": turn.start,
                     "end_time": turn.end,
-                    "audio_url": f"http://127.0.0.1:8000/segment_audio/{os.path.basename(segment_path)}"  # URL du fichier audio
+                    "audio_url": f"{server_url}/segment_audio/{os.path.basename(segment_path)}"  # URL du fichier audio
                 }
 
                 logging.debug(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée\n Résultat de la transcription {segment}")
@@ -295,6 +299,11 @@ async def upload_file(file: UploadFile = File(...)):
             os.remove(file_path)
             logging.debug(f"Fichier temporaire {file_path} supprimé.")
 
+
+# Endpoint pour générer les URLs des segments audio
+@app.get("/generate_audio_url/{filename}")
+def generate_audio_url(filename: str):
+    return {"url": f"{server_url}/segment_audio/{filename}"}
 
 # Endpoint pour servir les segments audio
 @app.get("/segment_audio/{filename}")
