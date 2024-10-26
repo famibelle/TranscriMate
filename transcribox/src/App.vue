@@ -1,6 +1,6 @@
 <template>
   <div :class="{ dark: isDarkMode }">
-    <div id="app">
+    <div id="app" class="page-container">
       <!-- Vue principale affichée après l'upload du fichier -->
       <div v-if="file">
         <!-- Section fichier avec le même style que Statistiques -->
@@ -70,7 +70,7 @@
           <div class="progress-bar-body">
             <!-- Barre de progression ASCII pour la transcription globale -->
             <pre>{{ updateAsciiProgressBar() }}</pre>
-            <p>{{ transcriptionProgress.toFixed(2) }}% transcrit</p> <!-- Montre le pourcentage -->
+            <p>{{ transcriptionProgress.toFixed(2) }}% de l'audio transcrit</p> <!-- Montre le pourcentage -->
           </div>
         </div>
 
@@ -83,34 +83,40 @@
 
             <div class="stats-subheader">👥 Répartition temps de parole</div>
             <ul>
-              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index">
-                {{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du temps total
+              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index" class="speaker-stat">
+                <span class="speaker-label">{{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du
+                  temps total</span>
+                <div class="bar-container">
+                  <div class="bar" :style="{ width: speakerStat.percentage.toFixed(2) + '%' }"></div>
+                </div>
               </li>
             </ul>
           </div>
         </div>
 
         <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
-        <div class="conversation-container" :class="{ dark: isDarkMode }">
+        <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
           <div class="conversation-header">💬 Conversation</div>
           <div class="conversation-body">
             <div v-for="(segment, index) in transcriptions" :key="index" class="message"
               :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
               <div class="message-header">
-                <span v-if="!segment.isEditing" class="speaker" @click="toggleSpeakerAudio(segment, index)"
-                  @contextmenu.prevent="enableEditMode(segment, $event)">
+                <span v-if="!segment.isEditing" class="speaker"
+                  @click="isTranscriptionComplete ? toggleSpeakerAudio(segment, index) : null"
+                  @contextmenu.prevent="isTranscriptionComplete ? enableEditMode(segment, $event) : null">
                   <span v-if="playingIndex === index">⏸️</span>
                   {{ segment.speaker }}:
                 </span>
                 <input v-else class="edit-input" type="text" v-model="segment.speaker"
-                  @blur="applySpeakerChange(segment)" @keyup.enter="applySpeakerChange(segment)" />
+                  :disabled="!isTranscriptionComplete" @blur="applySpeakerChange(segment)"
+                  @keyup.enter="applySpeakerChange(segment)" />
               </div>
 
               <!-- Texte complet du segment entouré dans une bulle -->
               <div class="message-body">
                 <div class="chunk-container">
                   <span v-for="(chunk, i) in segment.text.chunks" :key="i" class="chunk"
-                    @click="playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i)">
+                    @click="isTranscriptionComplete ? playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i) : null">
                     {{ chunk.text }}<span v-if="i < segment.text.chunks.length - 1"> </span>
                   </span>
                 </div>
@@ -118,6 +124,7 @@
             </div>
           </div>
         </div>
+
 
 
         <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
@@ -179,6 +186,9 @@ export default {
   },
 
   computed: {
+    isTranscriptionComplete() {
+      return this.transcriptionProgress === 100;
+    },
     // Computed property pour concaténer toute la transcription
     fullTranscription() {
       return this.transcriptions
@@ -296,6 +306,9 @@ export default {
 
     // Formater le temps en minutes et secondes
     formatTime(seconds) {
+      if (seconds === "...") {
+        return "...";
+      }
       const minutes = Math.floor(seconds / 60);
       const remainingSeconds = Math.floor(seconds % 60);
       return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
@@ -393,7 +406,7 @@ export default {
 
       // Mettre à jour les statistiques avec les nouvelles données
       this.speechStats = {
-        totalDuration: totalDuration,         // Durée totale de l'audio
+        totalDuration: isNaN(totalDuration) ? "..." : totalDuration,  // Durée totale de l'audio ou "..." si NaN
         speakers: percentageStats,            // Répartition des locuteurs et pourcentages
         totalSpeakers: percentageStats.length // Nombre de locuteurs identifiés
       };
@@ -633,6 +646,8 @@ body {
 }
 
 /* Bordures pour tous les conteneurs principaux en mode sombre */
+.dark .upload-box,
+.dark .upload-container,
 .dark .file-container,
 .dark .stats-container,
 .dark .transcription-full-container,
@@ -641,7 +656,7 @@ body {
 .dark .conversation-container {
   border-color: #555;
   /* Bordure sombre pour s'adapter au mode dark */
-  background-color: #1e1e1e;
+  background-color: #000000;
   /* Fond sombre uniforme */
 }
 
@@ -684,7 +699,6 @@ body {
 button {
   background-color: #4CAF50;
   color: white;
-  padding: 10px 20px;
   border: none;
   border-radius: 5px;
   cursor: pointer;
@@ -714,8 +728,14 @@ button:hover {
   align-items: center;
   padding: 10px;
   background-color: #eee;
-  border-bottom: 1px solid #ccc;
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  /* Correction de l'erreur '5x' */
 }
+
 
 .file-header .controls {
   display: flex;
@@ -827,6 +847,7 @@ textarea {
 }
 
 /* Applique un fond sombre pour .dark */
+.dark .loading-message,
 .dark .progress-bar-container,
 .dark .audio-player-container,
 .dark .conversation-container {
@@ -836,6 +857,7 @@ textarea {
 }
 
 /* Style pour les headers en mode sombre */
+.dark .loading-message,
 .dark .progress-bar-header,
 .dark .audio-player-header,
 .dark .conversation-header {
@@ -844,6 +866,7 @@ textarea {
 }
 
 /* Ajuste les couleurs des sections internes */
+.dark .loading-message pre,
 .dark .progress-bar-body pre,
 .dark .audio-player-body,
 .dark .conversation-body {
@@ -857,6 +880,7 @@ textarea {
 }
 
 /* Couleur de texte adaptative en fonction du mode */
+.dark .loading-message pre,
 .dark .conversation-container,
 .dark .stats-container,
 .dark .transcription-full-container,
@@ -1307,13 +1331,6 @@ li {
   border-radius: 8px;
 }
 
-.file-header {
-  font-weight: bold;
-  border-bottom: 1px solid #333;
-  padding-bottom: 5px;
-  margin-bottom: 10px;
-}
-
 .file-body {
   display: flex;
   justify-content: space-between;
@@ -1383,9 +1400,90 @@ li {
   text-align: center;
   margin-bottom: 10px;
 }
+
 pre {
   font-family: monospace;
   text-align: center;
   color: #000000;
 }
+
+/* Styles globaux */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f0f0f0;
+  /* Couleur de fond claire par défaut */
+  color: #333;
+  /* Couleur du texte par défaut */
+}
+
+/* Conteneur principal pour centrer et encadrer le contenu */
+.page-container {
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #ffffff;
+  /* Fond clair par défaut */
+  color: #333;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Mode sombre */
+.dark .page-container {
+  background-color: #1e1e1e;
+  /* Fond sombre */
+  color: #e0e0e0;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  /* Ombre plus intense */
+}
+
+
+.stats-subheader {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.speaker-stat {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.speaker-label {
+  flex: 1;
+  /* Prend tout l'espace disponible à gauche */
+  margin-right: 10px;
+}
+
+.bar-container {
+  width: 33%;
+  /* Largeur fixe ou ajustable de la barre */
+  background-color: #e0e0e0;
+  border-radius: 5px;
+  overflow: hidden;
+  height: 20px;
+  /* Hauteur de la barre */
+}
+
+.bar {
+  height: 100%;
+  /* Prend toute la hauteur du conteneur */
+  background-color: #4CAF50;
+  /* Couleur de la barre */
+  border-radius: 5px 0 0 5px;
+  transition: width 0.3s ease;
+  /* Transition pour une animation douce */
+}
+
+.conversation-container.disabled {
+  opacity: 0.9;
+  pointer-events: none; /* Désactive toutes les interactions dans le conteneur */
+}
+
 </style>

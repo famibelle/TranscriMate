@@ -174,6 +174,13 @@ async def upload_file(file: UploadFile = File(...)):
     file_extension = os.path.splitext(file_path)[1].lower()
     logging.debug(f"Extension détectée {file_extension}.")
 
+    # audio = extract_audio(file_path)
+    
+    # if audio is not None:
+    #     print(f"Audio extrait avec succès. Durée : {len(audio) / 1000} secondes")
+    #     # Vous pouvez maintenant utiliser l'objet audio (AudioSegment) comme vous le souhaitez
+    #     # Par exemple : audio.export("sortie.mp3", format="mp3")    
+
     try:
         # Sauvegarder temporairement le fichier uploadé
         with open(file_path, "wb") as f:
@@ -413,3 +420,69 @@ def convert_tracks_to_json(tracks):
     # Convertir la liste de segments en JSON
     # return json.dumps(formatted_segments)
     return formatted_segments
+
+
+
+import filetype
+import logging
+from pydub import AudioSegment
+from moviepy.editor import VideoFileClip
+import os
+import tempfile
+
+def extract_audio(file_path):
+    """
+    Extrait l'audio d'un fichier média (audio ou vidéo) et retourne un AudioSegment.
+    """
+    # Détecter le type de fichier
+    file_type = filetype.guess(file_path)
+    
+    if file_type is None:
+        logging.error(f"Type de fichier non reconnu pour : {file_path}")
+        return None
+        
+    logging.debug(f"Type de fichier détecté : {file_type.mime}, Extension : {file_type.extension}")
+    
+    try:
+        # Gestion des fichiers audio
+        if file_type.mime.startswith('audio/'):
+            logging.debug(f"Fichier audio détecté : {file_type.mime}")
+            return AudioSegment.from_file(file_path)
+                
+        # Gestion des fichiers vidéo
+        elif file_type.mime.startswith('video/'):
+            logging.debug(f"Fichier vidéo détecté : {file_type.mime}")
+            logging.debug("Extraction Audio démarrée ...")
+            
+            # Créer un fichier temporaire pour l'audio extrait
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_audio:
+                temp_audio_path = temp_audio.name
+                
+            try:
+                # Extraire l'audio de la vidéo
+                video = VideoFileClip(file_path)
+                video.audio.write_audiofile(temp_audio_path, logger=None)
+                video.close()
+                
+                # Charger l'audio extrait
+                audio = AudioSegment.from_wav(temp_audio_path)
+                
+                # Nettoyer le fichier temporaire
+                os.unlink(temp_audio_path)
+                
+                return audio
+                
+            except Exception as e:
+                # Nettoyer en cas d'erreur
+                if os.path.exists(temp_audio_path):
+                    os.unlink(temp_audio_path)
+                raise e
+                
+        else:
+            logging.warning(f"Type de fichier non supporté : {file_type.mime}")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Erreur lors de l'extraction audio : {e}")
+        return None
+
