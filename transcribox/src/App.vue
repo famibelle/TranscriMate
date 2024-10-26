@@ -103,7 +103,10 @@
               <div class="message-header">
                 <span v-if="!segment.isEditing" class="speaker"
                   @click="isTranscriptionComplete ? toggleSpeakerAudio(segment, index) : null"
-                  @contextmenu.prevent="isTranscriptionComplete ? enableEditMode(segment, $event) : null">
+                  @contextmenu.prevent="isTranscriptionComplete ? enableEditMode(segment) : null"
+                  @touchstart.prevent="handleTouchStart($event, segment)"
+                  @touchend.prevent="handleTouchEnd($event)">
+
                   <span v-if="playingIndex === index">⏸️</span>
                   {{ segment.speaker }}:
                 </span>
@@ -155,6 +158,8 @@
 export default {
   data() {
     return {
+      touchTimer: null,
+      touchStartTime: null,
       loadingMessage: "🔄 Extraction audio en cours...",
       progressBarExtractionAudio: "[░░░░░░░░░░]",
       progress: 0,
@@ -202,6 +207,24 @@ export default {
   },
 
   methods: {
+    handleTouchStart(event, segment) {
+    if (!this.isTranscriptionComplete) return;
+    
+    this.touchStartTime = new Date().getTime();
+    this.touchTimer = setTimeout(() => {
+      this.enableEditMode(segment); // On appelle directement avec le segment
+    }, 600);
+  },
+
+  handleTouchEnd(event) {
+    clearTimeout(this.touchTimer);
+    
+    const touchDuration = new Date().getTime() - this.touchStartTime;
+    if (touchDuration >= 600) {
+      event.preventDefault();
+    }
+  },
+
     startProgressLoop() {
       this.intervalId = setInterval(() => {
         this.progress = (this.progress + 1) % 10; // Boucle de 0 à 9 pour la progression
@@ -1483,17 +1506,19 @@ ul {
 
 .conversation-container.disabled {
   opacity: 0.9;
-  pointer-events: none; /* Désactive toutes les interactions dans le conteneur */
+  pointer-events: none;
+  /* Désactive toutes les interactions dans le conteneur */
 }
 
 .dark .loading-message,
 .dark-loading-message {
-  color: #c0c0c0; /* Texte clair pour le mode sombre */
+  color: #c0c0c0;
+  /* Texte clair pour le mode sombre */
 }
 
 .dark pre,
 .dark-progress-bar {
-  color: #c0c0c0; /* Couleur plus claire pour la barre de progression */
+  color: #c0c0c0;
+  /* Couleur plus claire pour la barre de progression */
 }
-
 </style>
