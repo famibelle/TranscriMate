@@ -155,7 +155,7 @@
 export default {
   data() {
     return {
-      loadingMessage: "Extraction audio en cours...",
+      loadingMessage: "🔄 Extraction audio en cours...",
       progressBarExtractionAudio: "[░░░░░░░░░░]",
       progress: 0,
       intervalId: null,
@@ -1484,6 +1484,16 @@ ul {
 .conversation-container.disabled {
   opacity: 0.9;
   pointer-events: none; /* Désactive toutes les interactions dans le conteneur */
+}
+
+.dark .loading-message,
+.dark-loading-message {
+  color: #c0c0c0; /* Texte clair pour le mode sombre */
+}
+
+.dark pre,
+.dark-progress-bar {
+  color: #c0c0c0; /* Couleur plus claire pour la barre de progression */
 }
 
 </style>
