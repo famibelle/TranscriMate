@@ -58,11 +58,28 @@
           <div v-if="progressMessage">
             <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
             {{ progressMessage }}
+            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👅</span>
           </div>
           <div class="progress-bar-body">
             <!-- Barre de progression ASCII pour la transcription globale -->
             <pre>{{ updateAsciiProgressBar() }}</pre>
             <p>{{ transcriptionProgress.toFixed(2) }}% transcrit</p> <!-- Montre le pourcentage -->
+          </div>
+        </div>
+
+        <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
+        <div class="stats-container">
+          <div class="stats-header">📊 Statistiques</div>
+          <div class="stats-body">
+            <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
+            <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
+
+            <div class="stats-subheader">👥 Répartition temps de parole</div>
+            <ul>
+              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index">
+                {{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du temps total
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -96,29 +113,12 @@
         </div>
 
 
-
-        <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
-        <div class="stats-container">
-          <div class="stats-header">📊 Statistiques</div>
-          <div class="stats-body">
-            <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
-            <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
-
-            <div class="stats-subheader">👥 Répartition temps de parole</div>
-            <ul>
-              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index">
-                {{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du temps total
-              </li>
-            </ul>
-          </div>
-        </div>
-
         <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
         <div v-if="transcriptions.length > 0" class="transcription-full-container">
           <div class="transcription-header">📝 Transcription complète</div>
+          <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
           <textarea v-model="fullTranscription" class="transcription-textarea" readonly
             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
-          <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
         </div>
 
       </div>
@@ -882,58 +882,63 @@ li {
 
 /* Conteneur principal */
 .transcription-full-container {
-  background-color: #2b2b2b;
-  /* Couleur de fond sombre */
-  border: 1px solid #3e3e3e;
-  /* Bordure avec une couleur légèrement plus claire */
-  border-radius: 8px;
-  /* Angles arrondis pour un style moderne */
-  padding: 20px;
-  /* Espacement interne */
-  max-width: 80%;
-  /* Limite la largeur */
+  border: 1px solid #333;
+  width: 80%;
+  /* Définit la largeur à 80% de la page */
+  max-width: 800px;
+  /* Optionnel : limite la largeur maximale pour les grands écrans */
   margin: 20px auto;
-  /* Centré horizontalement */
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  /* Légère ombre pour effet de profondeur */
+  /* Centre le cadre horizontalement */
+  padding: 10px;
+  font-family: monospace;
 }
 
 /* Titre de la transcription */
 .transcription-header {
-  font-size: 1em;
-  /* Taille plus grande pour le titre */
-  color: #ffffff;
-  /* Couleur blanche du texte pour le mode sombre */
-  text-align: center;
-  /* Centré horizontalement */
-  margin-bottom: 15px;
-  /* Espacement sous le titre */
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
 }
 
 /* Zone de texte pour la transcription */
 .transcription-textarea {
   width: 100%;
-  /* Prend toute la largeur du conteneur */
   background-color: #1e1e1e;
-  /* Fond plus sombre pour le texte */
   color: #ffffff;
-  /* Couleur du texte en blanc pour un bon contraste */
   border: 1px solid #3e3e3e;
-  /* Bordure légère */
   border-radius: 5px;
-  /* Angles arrondis */
   padding: 10px;
-  /* Espacement interne */
   font-family: 'Courier New', monospace;
-  /* Police monospaced pour style de code */
   font-size: 1em;
-  /* Taille normale du texte */
   resize: none;
-  /* Désactive le redimensionnement manuel */
-  overflow-y: hidden;
-  /* Cacher la barre de défilement verticale */
+  overflow-y: auto; /* Autorise la barre de défilement verticale */
   box-sizing: border-box;
-  /* Inclut la bordure dans la largeur totale */
+  transition: box-shadow 0.3s ease;
+}
+
+/* Ombre au focus */
+.transcription-textarea:focus {
+  outline: none;
+  box-shadow: 0px 0px 5px 2px rgba(255, 255, 255, 0.2);
+}
+
+/* Style de la barre de défilement sobre */
+.transcription-textarea::-webkit-scrollbar {
+  width: 8px; /* Largeur de la barre de défilement */
+}
+
+.transcription-textarea::-webkit-scrollbar-track {
+  background: #1e1e1e; /* Fond de la zone de défilement (même que l'arrière-plan) */
+}
+
+.transcription-textarea::-webkit-scrollbar-thumb {
+  background-color: #3e3e3e; /* Couleur de la poignée de défilement */
+  border-radius: 5px; /* Arrondi pour un look plus moderne */
+}
+
+.transcription-textarea::-webkit-scrollbar-thumb:hover {
+  background-color: #555555; /* Légèrement plus clair au survol */
 }
 
 /* Bouton Copier */
@@ -1284,11 +1289,14 @@ li {
 
 /* Code CSS pour l'Animation de Battement */
 @keyframes heartbeat {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
-    transform: scale(1.2);
+    transform: scale(1.5);
   }
 }
 
@@ -1296,5 +1304,4 @@ li {
   display: inline-block;
   animation: heartbeat 0.8s infinite;
 }
-
 </style>

@@ -2,6 +2,8 @@ import asyncio
 from rich.progress import Progress
 import threading
 
+import filetype
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 
@@ -177,6 +179,11 @@ async def upload_file(file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             f.write(await file.read())
         logging.debug(f"Fichier {file.filename} sauvegardé avec succès.")
+
+        file_type = filetype.guess(file_path)
+        logging.debug(f"Type de fichier : {file_type.mime}")
+        logging.debug(f"Extension : {file_type.extension}")
+
         # Si le fichier est un fichier audio (formats courants)
         if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
             logging.debug(f"fichier audio détecté: {file_extension}.")
@@ -186,7 +193,7 @@ async def upload_file(file: UploadFile = File(...)):
         elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
             logging.debug(f"fichier vidéo détecté: {file_extension}.")
             video_clip = VideoFileClip(file_path)
-            audio = AudioSegment.from_file(file_path, format=file.filename)
+            audio = AudioSegment.from_file(file_path, format=file_type.extension)
 
         logging.debug(f"Conversion du {file.filename} en mono 16kHz.")
         audio = audio.set_channels(1)
