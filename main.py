@@ -203,46 +203,26 @@ async def upload_file(file: UploadFile = File(...)):
         # Étape 1 : Diarisation
         logging.debug(f"Démarrage de la diarisation du fichier {audio_path}")
 
-        # Variable pour stocker la progression
-        progress_data = {"progress": 0}
-        
-        def monitor_progress():
-            """Thread pour surveiller la progression."""
-            while not progress_data["done"]:
-                task_progress = []
-                for task in hook.progress.tasks:
-                    progress_percentage = (task.completed / task.total) * 100 if task.total else 100
-                    task_progress.append({
-                        "task": task.description,
-                        "progress": progress_percentage
-                    })
-                progress_data["progress"] = task_progress
-                print(progress_data)
-                time.sleep(0.5)  # Mettre à jour toutes les 500 ms
-
-        with ProgressHook() as hook:
-            # Démarrer le thread de suivi de la progression
-            progress_data["done"] = False
-            monitor_thread = threading.Thread(target=monitor_progress)
-            monitor_thread.start()
-
-            diarization = diarization_model(audio_path, hook=hook)
-
-            # La tâche de diarisation est terminée, donc arrêter le suivi
-            progress_data["done"] = True
-            monitor_thread.join()
-
-            # Envoyer la progression du hook
-            # yield f"data: {json.dumps({'progress': hook.progress})}\n\n"
-            # Calculer le pourcentage de progression
-            # progress_percentage = (hook.progress.completed / hook.progress.total) * 100
-
-        diarization_json = convert_tracks_to_json(diarization)
-        logging.debug(f"Résultat de la diarization {diarization_json}")
-
-        # Streaming des résultats
         async def live_process_audio():
+            # Envoi du statut "en cours" avec emoji
+            start_diarization = json.dumps({'status': 'diarization_processing', 'message': 'Séparation des voix en cours...'})
+            yield f"{start_diarization}\n"
+            await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
+            logging.debug(start_diarization)
+
+            with ProgressHook() as hook:
+                diarization = diarization_model(audio_path, hook=hook)
+
+            # Envoi final du statut pour indiquer la fin
+            end_diarization = json.dumps({'status': 'diarization_done', 'message': 'Séparation terminée.'})
+            yield f"{end_diarization}\n"
+            await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
+            logging.debug(end_diarization)
+
+            diarization_json = convert_tracks_to_json(diarization)
+
             # Envoyer la diarisation complète d'abord
+            logging.debug(f"{json.dumps({'diarization': diarization_json})}")
             yield f"{json.dumps({'diarization': diarization_json})}\n"
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
     
@@ -406,4 +386,5 @@ def convert_tracks_to_json(tracks):
         formatted_segments.append(segment)
 
     # Convertir la liste de segments en JSON
-    return json.dumps(formatted_segments)
+    # return json.dumps(formatted_segments)
+    return formatted_segments

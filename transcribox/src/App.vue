@@ -55,6 +55,10 @@
         <!-- Section de la barre de progression ASCII pour la transcription globale -->
         <div class="progress-bar-container">
           <div class="progress-bar-header">📈 Progression de la Transcription</div>
+          <div v-if="progressMessage">
+            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
+            {{ progressMessage }}
+          </div>
           <div class="progress-bar-body">
             <!-- Barre de progression ASCII pour la transcription globale -->
             <pre>{{ updateAsciiProgressBar() }}</pre>
@@ -137,6 +141,7 @@
 export default {
   data() {
     return {
+      progressMessage: '',  // Nouveau message de progression
       diarization: null,  // Stockage des données de diarisation complètes
       speakerColors: {}, // Associera chaque locuteur à une couleur unique
       isDarkMode: false, // Contrôle du mode sombre
@@ -461,18 +466,18 @@ export default {
     // Envoie le fichier au backend et récupère les transcriptions
     async uploadFile() {
       // Réinitialiser toutes les variables liées à la transcription
-      this.transcriptions = [];         // Réinitialise la liste des transcriptions
-      this.fullTranscription = '';      // Réinitialise la transcription complète
-      this.currentAudio = null;         // Réinitialise l'audio en cours
-      this.currentChunkIndex = null;    // Réinitialise l'index du chunk
-      this.speechStats = {};            // Réinitialise les statistiques de parole
-      this.diarization = null;          // Réinitialise les données de diarisation
-      this.transcriptionProgress = 0;   // Réinitialise la barre de progression      
+      this.transcriptions = [];
+      this.fullTranscription = '';
+      this.currentAudio = null;
+      this.currentChunkIndex = null;
+      this.speechStats = {};
+      this.diarization = null;
+      this.transcriptionProgress = 0;
+      this.progressData = {}; // Stocker le statut de progression
 
       const formData = new FormData();
       formData.append('file', this.file);
 
-      // Requête POST vers ton backend pour obtenir les transcriptions
       try {
         const response = await fetch('http://localhost:8000/uploadfile/', {
           method: 'POST',
@@ -499,42 +504,51 @@ export default {
           // Traiter chaque segment JSON
           for (const line of lines) {
             if (line.trim()) {
-              const data = JSON.parse(line);
-              // Vérifie si les données contiennent 'diarization'
+              try {
+                const data = JSON.parse(line);
+                console.log("Data reçue: ", data);
 
-              if (data.progress_data) {
-                this.progressData = JSON.parse(data.progress_data); 
-              }
+                // Gestion de l'état "processing" pour afficher le message
+                if (data.status === 'diarization_processing') {
+                  this.progressData.message = data.message;  // Affiche "👂 Séparation des voix en cours..."
+                  this.progressMessage = data.message;  // Affiche "👂 Séparation des voix en cours..." dans la progression
+                  this.progressData.status = data.status;
 
-              if (data.diarization) {
-                this.diarization = JSON.parse(data.diarization); // Stocke les données de la diarisation complète
-                console.log(typeof this.diarization, this.diarization)
-                this.totalDuration = this.diarization.reduce((acc, entry) => acc + (entry.end_time - entry.start_time), 0);
-                this.calculateSpeechStats();  // Calculer les statistiques à réceptions des infos de diarization
-              }
-              else {
-                // Ajoute les segments de transcription
-                console.log("Segment reçu:", line);  // Ajout du log pour chaque segment reçu
-                const segment = JSON.parse(line);  // Convertir le JSON en objet
-                // Créer un nouveau tableau à chaque ajout
-                this.transcriptions.push(segment);  // Ajouter le segment au tableau des transcriptions
+                } else if (data.status === 'diarization_done') {
+                  this.progressData.message = data.message;  // Affiche "Séparation terminée."
+                  // this.progressMessage = ''; // Réinitialise le message une fois terminé
+                  this.progressMessage = data.message;
+                  this.progressData.status = data.status;
 
-                // Mettre à jour la progression
-                const processedDuration = this.transcriptions.reduce((acc, seg) => acc + (seg.end_time - seg.start_time), 0);
-                console.log("processedDuration: ", processedDuration);  // Ajout du log pour chaque segment reçu
-                console.log("this.totalDuration: ", this.totalDuration)
-                this.transcriptionProgress = (processedDuration / this.totalDuration) * 100;
+                }
 
-                this.$nextTick(() => {
-                  console.log("DOM mis à jour avec le nouveau segment");
-                  console.log("Transcription mise à jour:", this.transcriptions);  // Log pour vérifier la mise à jour
-                });  // S'assurer que Vue met à jour le DOM après chaque ajout
+                // Si on reçoit la diarization complète
+                else if (data.diarization) {
+                  this.diarization = data.diarization;
+                  this.totalDuration = this.diarization.reduce((acc, entry) => acc + (entry.end_time - entry.start_time), 0);
+                  this.calculateSpeechStats();
+                }
+
+                // Si on reçoit un segment de transcription
+                else if (data.speaker && data.text && data.text.chunks) {
+                  const segment = data;
+                  this.transcriptions.push(segment);
+
+                  // Calcul de la progression
+                  const processedDuration = this.transcriptions.reduce((acc, seg) => acc + (seg.end_time - seg.start_time), 0);
+                  this.transcriptionProgress = (processedDuration / this.totalDuration) * 100;
+
+                  this.$nextTick(() => {
+                    console.log("DOM mis à jour avec le nouveau segment");
+                  });
+                }
+              } catch (error) {
+                console.error("Erreur de parsing JSON :", error);
               }
             }
           }
         }
         console.log("Streaming terminé.");
-
       } catch (error) {
         console.error("Erreur lors de l'upload ou récupération des transcriptions", error);
       }
@@ -1267,4 +1281,20 @@ li {
   color: #333;
   /* Couleur du texte plus sombre */
 }
+
+/* Code CSS pour l'Animation de Battement */
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+.pulsating-emoji {
+  display: inline-block;
+  animation: heartbeat 0.8s infinite;
+}
+
 </style>
