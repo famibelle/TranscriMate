@@ -3,12 +3,14 @@ module.exports = defineConfig({
   transpileDependencies: true
 })
 
-module.exports = {
+module.exports = defineConfig({
+  transpileDependencies: true,
   devServer: {
-    host: 'localhost',  // Utiliser localhost comme hôte
-    port: 8080,         // Le port que tu utilises
+    host: '0.0.0.0',
+    port: 8080,
     client: {
-      webSocketURL: 'ws://localhost:8080/ws', // Configuration pour le WebSocket
+      webSocketURL: 'ws://localhost:8080/ws', // Configuration WebSocket
     },
+    allowedHosts: 'all', // Autoriser tous les hôtes pour éviter Invalid Host header
   },
-};
+});

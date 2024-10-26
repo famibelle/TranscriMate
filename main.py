@@ -221,7 +221,7 @@ async def upload_file(file: UploadFile = File(...)):
                 diarization = diarization_model(audio_path, hook=hook)
 
             # Envoi final du statut pour indiquer la fin
-            end_diarization = json.dumps({'status': 'diarization_done', 'message': 'Séparation terminée.'})
+            end_diarization = json.dumps({'status': 'diarization_done', 'message': 'Séparation des voix terminée.'})
             yield f"{end_diarization}\n"
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
             logging.debug(end_diarization)

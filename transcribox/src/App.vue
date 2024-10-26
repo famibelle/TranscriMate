@@ -479,7 +479,8 @@ export default {
       formData.append('file', this.file);
 
       try {
-        const response = await fetch('http://localhost:8000/uploadfile/', {
+        //  const response = await fetch('http://localhost:8000/uploadfile/', {
+        const response = await fetch(`${process.env.VUE_APP_API_URL}/uploadfile/`, {
           method: 'POST',
           body: formData
         });
@@ -912,7 +913,8 @@ li {
   font-family: 'Courier New', monospace;
   font-size: 1em;
   resize: none;
-  overflow-y: auto; /* Autorise la barre de défilement verticale */
+  overflow-y: auto;
+  /* Autorise la barre de défilement verticale */
   box-sizing: border-box;
   transition: box-shadow 0.3s ease;
 }
@@ -925,20 +927,25 @@ li {
 
 /* Style de la barre de défilement sobre */
 .transcription-textarea::-webkit-scrollbar {
-  width: 8px; /* Largeur de la barre de défilement */
+  width: 8px;
+  /* Largeur de la barre de défilement */
 }
 
 .transcription-textarea::-webkit-scrollbar-track {
-  background: #1e1e1e; /* Fond de la zone de défilement (même que l'arrière-plan) */
+  background: #1e1e1e;
+  /* Fond de la zone de défilement (même que l'arrière-plan) */
 }
 
 .transcription-textarea::-webkit-scrollbar-thumb {
-  background-color: #3e3e3e; /* Couleur de la poignée de défilement */
-  border-radius: 5px; /* Arrondi pour un look plus moderne */
+  background-color: #3e3e3e;
+  /* Couleur de la poignée de défilement */
+  border-radius: 5px;
+  /* Arrondi pour un look plus moderne */
 }
 
 .transcription-textarea::-webkit-scrollbar-thumb:hover {
-  background-color: #555555; /* Légèrement plus clair au survol */
+  background-color: #555555;
+  /* Légèrement plus clair au survol */
 }
 
 /* Bouton Copier */
