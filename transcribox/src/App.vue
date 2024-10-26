@@ -503,9 +503,9 @@ export default {
               // Vérifie si les données contiennent 'diarization'
 
               if (data.progress_data) {
-                this.progressData = data.progress_data;
+                this.progressData = JSON.parse(data.progress_data); 
               }
-              
+
               if (data.diarization) {
                 this.diarization = JSON.parse(data.diarization); // Stocke les données de la diarisation complète
                 console.log(typeof this.diarization, this.diarization)

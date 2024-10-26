@@ -217,7 +217,7 @@ async def upload_file(file: UploadFile = File(...)):
                         "progress": progress_percentage
                     })
                 progress_data["progress"] = task_progress
-                yield f"{json.dumps({'progress_data': progress_data})}\n"
+                print(progress_data)
                 time.sleep(0.5)  # Mettre à jour toutes les 500 ms
 
         with ProgressHook() as hook:
