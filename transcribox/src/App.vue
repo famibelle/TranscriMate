@@ -468,7 +468,7 @@ export default {
       this.speechStats = {};            // Réinitialise les statistiques de parole
       this.diarization = null;          // Réinitialise les données de diarisation
       this.transcriptionProgress = 0;   // Réinitialise la barre de progression      
-      
+
       const formData = new FormData();
       formData.append('file', this.file);
 
@@ -501,6 +501,11 @@ export default {
             if (line.trim()) {
               const data = JSON.parse(line);
               // Vérifie si les données contiennent 'diarization'
+
+              if (data.progress_data) {
+                this.progressData = data.progress_data;
+              }
+              
               if (data.diarization) {
                 this.diarization = JSON.parse(data.diarization); // Stocke les données de la diarisation complète
                 console.log(typeof this.diarization, this.diarization)
