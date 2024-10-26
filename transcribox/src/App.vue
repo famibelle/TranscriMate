@@ -5,13 +5,16 @@
       <div v-if="file">
         <!-- Section fichier avec le même style que Statistiques -->
         <div class="file-container">
-          <div class="file-header">📁 Fichier</div>
+          <div class="file-header">📁 Fichier
+            <div class="settings-group">
+              <button @click="openSettings" class="settings-button">⚙️</button>
+              <button @click="toggleDarkMode" class="settings-button">{{ isDarkMode ? "🌞" : "🌙" }}</button>
+            </div>
+          </div>
           <div class="file-body">
             <span>{{ file.name }}</span>
             <div class="controls">
-              <button @click="openSettings">⚙️</button>
               <button @click="removeFile">❌</button>
-              <button @click="toggleDarkMode">{{ isDarkMode ? "🌞" : "🌙" }}</button>
             </div>
           </div>
 
@@ -55,6 +58,10 @@
         <!-- Section de la barre de progression ASCII pour la transcription globale -->
         <div class="progress-bar-container">
           <div class="progress-bar-header">📈 Progression de la Transcription</div>
+          <div>
+            <div class="loading-message">{{ loadingMessage }}</div>
+            <pre>{{ progressBarExtractionAudio }}</pre>
+          </div>
           <div v-if="progressMessage">
             <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
             {{ progressMessage }}
@@ -141,6 +148,10 @@
 export default {
   data() {
     return {
+      loadingMessage: "Extraction audio en cours...",
+      progressBarExtractionAudio: "[░░░░░░░░░░]",
+      progress: 0,
+      intervalId: null,
       progressMessage: '',  // Nouveau message de progression
       diarization: null,  // Stockage des données de diarisation complètes
       speakerColors: {}, // Associera chaque locuteur à une couleur unique
@@ -181,6 +192,19 @@ export default {
   },
 
   methods: {
+    startProgressLoop() {
+      this.intervalId = setInterval(() => {
+        this.progress = (this.progress + 1) % 10; // Boucle de 0 à 9 pour la progression
+        const filled = '█'.repeat(this.progress);
+        const empty = '░'.repeat(10 - this.progress);
+        this.progressBarExtractionAudio = `[${filled}${empty}]`;
+      }, 300); // Vitesse de progression en millisecondes
+    },
+    stopProgressLoop() {
+      clearInterval(this.intervalId);
+      this.progressBarExtractionAudio = "[██████████]"; // Barre pleine pour indiquer la fin
+      this.loadingMessage = "Extraction audio terminée!";
+    },
     getSpeakerColor(speaker) {
       // Vérifie si une couleur est déjà générée pour ce locuteur
       if (!this.speakerColors[speaker]) {
@@ -229,6 +253,7 @@ export default {
 
       return progressBar;
     },
+
 
     toggleSpeakerAudio(segment, index) {
       // Si un autre passage est en lecture, l'arrêter
@@ -496,6 +521,9 @@ export default {
       this.transcriptionProgress = 0;
       this.progressData = {}; // Stocker le statut de progression
 
+      this.startProgressLoop(); // Démarre la boucle de progression
+
+
       const formData = new FormData();
       formData.append('file', this.file);
 
@@ -530,6 +558,10 @@ export default {
                 const data = JSON.parse(line);
                 console.log("Data reçue: ", data);
 
+                if (data.extraction_audio_status === "extraction_audio_done") {
+                  this.stopProgressLoop(); // Arrête la boucle de progression lorsque l'extraction est terminée
+                }
+
                 // Gestion de l'état "processing" pour afficher le message
                 if (data.status === 'diarization_processing') {
                   this.progressData.message = data.message;  // Affiche "👂 Séparation des voix en cours..."
@@ -541,7 +573,6 @@ export default {
                   // this.progressMessage = ''; // Réinitialise le message une fois terminé
                   this.progressMessage = data.message;
                   this.progressData.status = data.status;
-
                 }
 
                 // Si on reçoit la diarization complète
@@ -662,6 +693,18 @@ button {
 
 button:hover {
   background-color: #45a049;
+}
+
+.settings-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.settings-group {
+  display: flex;
+  gap: 0.5em;
+  /* Espace entre les boutons, ajustez selon votre préférence */
 }
 
 /* Style de la vue principale */
@@ -1241,7 +1284,6 @@ li {
 .progress-bar-body pre {
   font-size: 16px;
   color: #333;
-  background-color: #e0e0e0;
   /* Fond légèrement plus sombre pour contraster */
   padding: 5px;
   border-radius: 4px;
@@ -1333,5 +1375,17 @@ li {
 .pulsating-emoji {
   display: inline-block;
   animation: heartbeat 0.8s infinite;
+}
+
+.loading-message {
+  font-family: monospace;
+  color: #555;
+  text-align: center;
+  margin-bottom: 10px;
+}
+pre {
+  font-family: monospace;
+  text-align: center;
+  color: #000000;
 }
 </style>

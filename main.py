@@ -169,10 +169,7 @@ async def upload_file(file: UploadFile = File(...)):
 @app.post("/uploadfile/")
 async def upload_file(file: UploadFile = File(...)):
     file_path = f"/tmp/{file.filename}"
-
     full_transcription =  []
-    full_transcription_text = "\n"
-
     # Détection de l'extension du fichier
     file_extension = os.path.splitext(file_path)[1].lower()
     logging.debug(f"Extension détectée {file_extension}.")
@@ -184,8 +181,7 @@ async def upload_file(file: UploadFile = File(...)):
         logging.debug(f"Fichier {file.filename} sauvegardé avec succès.")
 
         file_type = filetype.guess(file_path)
-        logging.debug(f"Type de fichier : {file_type.mime}")
-        logging.debug(f"Extension : {file_type.extension}")
+        logging.debug(f"Type de fichier : {file_type.mime}, Extension : {file_type.extension}")
 
         # Si le fichier est un fichier audio (formats courants)
         if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
@@ -197,7 +193,16 @@ async def upload_file(file: UploadFile = File(...)):
             logging.debug(f"fichier vidéo détecté: {file_extension}.")
             video_clip = VideoFileClip(file_path)
             logging.debug("Extraction Audio démarrée ...")
+
+            extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
+            logging.debug(extraction_status)
+            # yield f"{extraction_status}\n"
+
             audio = AudioSegment.from_file(file_path, format=file_type.extension)
+
+            extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
+            logging.debug(extraction_status)
+            # yield f"{extraction_status}\n"
 
         logging.debug(f"Conversion du {file.filename} en mono 16kHz.")
         audio = audio.set_channels(1)
@@ -215,7 +220,11 @@ async def upload_file(file: UploadFile = File(...)):
         logging.debug(f"Démarrage de la diarisation du fichier {audio_path}")
 
         async def live_process_audio():
-            # Envoi du statut "en cours" avec emoji
+            extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
+            yield f"{extraction_status}\n"
+            logging.debug(extraction_status)
+
+            # Envoi du statut "en cours"
             start_diarization = json.dumps({'status': 'diarization_processing', 'message': 'Séparation des voix en cours...'})
             yield f"{start_diarization}\n"
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
