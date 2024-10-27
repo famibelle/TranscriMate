@@ -53,6 +53,15 @@
             <!-- Affichage du temps actuel et de la durée totale -->
             <span>{{ formatTime(currentTime) }} / {{ formatTime(audioDuration) }}</span>
           </div>
+
+          <!-- Affichage du thumbnail si disponible -->
+          <div v-if="thumbnail" class="thumbnail-preview">
+            <h3>Aperçu de la vidéo :</h3>
+            <img :src="thumbnail" alt="Thumbnail de la vidéo" />
+          </div>
+
+          <!-- Élément vidéo caché pour capturer le thumbnail -->
+          <video ref="video" style="display: none;" @loadeddata="captureThumbnail"></video>
         </div>
 
         <!-- Section de la barre de progression ASCII pour la transcription globale -->
@@ -96,7 +105,7 @@
 
         <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
         <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
-          <div class="conversation-header">💬 Conversation</div>
+          <div class="conversation-header">💬 Conversation<span v-if="!isTranscriptionComplete" class="dots">...</span></div>
           <div class="conversation-body">
             <div v-for="(segment, index) in transcriptions" :key="index" class="message"
               :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
@@ -104,8 +113,7 @@
                 <span v-if="!segment.isEditing" class="speaker"
                   @click="isTranscriptionComplete ? toggleSpeakerAudio(segment, index) : null"
                   @contextmenu.prevent="isTranscriptionComplete ? enableEditMode(segment) : null"
-                  @touchstart.prevent="handleTouchStart($event, segment)"
-                  @touchend.prevent="handleTouchEnd($event)">
+                  @touchstart.prevent="handleTouchStart($event, segment)" @touchend.prevent="handleTouchEnd($event)">
 
                   <span v-if="playingIndex === index">⏸️</span>
                   {{ segment.speaker }}:
@@ -128,11 +136,10 @@
           </div>
         </div>
 
-
-
         <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
         <div v-if="transcriptions.length > 0" class="transcription-full-container">
-          <div class="transcription-header">📝 Transcription complète</div>
+          <div class="transcription-header">📝 {{ isTranscriptionComplete ? "Transcription complète" : "Transcription en cours ..." }}
+          </div>
           <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
           <textarea v-model="fullTranscription" class="transcription-textarea" readonly
             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
@@ -142,14 +149,43 @@
 
       <!-- Interface d'upload si aucun fichier n'est sélectionné -->
       <div v-else class="upload-container">
+        <!-- Titre principal et sous-titre pour clarifier la fonction du service -->
+        <div class="stats-container">
+          <div class="stats-header">🎙️ Service de Transcription et Séparation des Voix</div>
+          <div class="stats-body">
+            <p>Convertissez vos fichiers audio et vidéo en texte, avec une distinction automatique des
+              locuteurs.</p>
+          </div>
+        </div>
         <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
           <p>🎵 Déposez votre fichier audio ou vidéo ici</p>
           <p>ou</p>
           <button @click.stop="triggerFileInput">Sélectionnez un fichier</button>
           <p>Formats supportés : MP3, MP4, WAV, WebM</p>
         </div>
-        <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a" style="display: none" />
+        <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a"
+          style="display: none" />
+
+        <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
+        <div class="stats-container">
+          <div class="stats-header">🚀 Comment ça marche ?</div>
+
+          <ol>
+            <li><strong>Téléchargez</strong> votre fichier audio ou vidéo.</li>
+            <li><strong>Traitement automatique</strong> : Notre IA transcrit et identifie les différents locuteurs.</li>
+            <li><strong>Téléchargez la transcription</strong> avec la distinction de chaque intervenant.</li>
+          </ol>
+
+        </div>
+
+        <!-- Exemple de sortie pour montrer la séparation des voix -->
+        <div class="stats-container">
+          <div class="stats-header">✨ Exemple de sortie</div>
+          <p><strong>SPEAKER_1</strong> : Bonjour, comment allez-vous ?</p>
+          <p><strong>SPEAKER_2</strong> : Très bien, merci. Et vous ?</p>
+        </div>
       </div>
+
     </div>
   </div>
 </template>
@@ -158,6 +194,8 @@
 export default {
   data() {
     return {
+      thumbnail: null, // URL de l'image thumbnail
+      extraction_audio_status: "🔄 Extraction audio en cours...",
       touchTimer: null,
       touchStartTime: null,
       loadingMessage: "🔄 Extraction audio en cours...",
@@ -207,26 +245,57 @@ export default {
   },
 
   methods: {
-    handleTouchStart(event, segment) {
-    if (!this.isTranscriptionComplete) return;
-    
-    this.touchStartTime = new Date().getTime();
-    this.touchTimer = setTimeout(() => {
-      this.enableEditMode(segment); // On appelle directement avec le segment
-    }, 600);
-  },
+    // Capture un thumbnail de la vidéo sélectionnée
+    generateThumbnail(file) {
+      // Vérification de l'existence de l'élément vidéo
+      const videoElement = this.$refs.video;
+      if (!videoElement) {
+        console.error("L'élément vidéo n'est pas disponible");
+        return;
+      }
 
-  handleTouchEnd(event) {
-    clearTimeout(this.touchTimer);
-    
-    const touchDuration = new Date().getTime() - this.touchStartTime;
-    if (touchDuration >= 600) {
-      event.preventDefault();
-    }
-  },
+      videoElement.src = URL.createObjectURL(file); // Charger la vidéo
+      videoElement.load(); // Assurez-vous que la vidéo est chargée
+    },
+
+    // Capture le thumbnail quand les données de la vidéo sont prêtes
+    captureThumbnail() {
+      const videoElement = this.$refs.video;
+      if (!videoElement) return;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = videoElement.videoWidth;
+      canvas.height = videoElement.videoHeight;
+
+      const context = canvas.getContext("2d");
+      context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+      this.thumbnail = canvas.toDataURL("image/png");
+
+      URL.revokeObjectURL(videoElement.src);
+    },
+
+    handleTouchStart(event, segment) {
+      if (!this.isTranscriptionComplete) return;
+
+      this.touchStartTime = new Date().getTime();
+      this.touchTimer = setTimeout(() => {
+        this.enableEditMode(segment); // On appelle directement avec le segment
+      }, 600);
+    },
+
+    handleTouchEnd(event) {
+      clearTimeout(this.touchTimer);
+
+      const touchDuration = new Date().getTime() - this.touchStartTime;
+      if (touchDuration >= 600) {
+        event.preventDefault();
+      }
+    },
 
     startProgressLoop() {
       this.intervalId = setInterval(() => {
+        this.loadingMessage = "🔄 Extraction audio en cours...";
         this.progress = (this.progress + 1) % 10; // Boucle de 0 à 9 pour la progression
         const filled = '█'.repeat(this.progress);
         const empty = '░'.repeat(10 - this.progress);
@@ -286,7 +355,6 @@ export default {
 
       return progressBar;
     },
-
 
     toggleSpeakerAudio(segment, index) {
       // Si un autre passage est en lecture, l'arrêter
@@ -490,6 +558,14 @@ export default {
       if (files.length) {
         this.file = files[0];  // Stocke le fichier sélectionné
         console.log("Fichier sélectionné :", this.file);
+
+        // Vérifie si le fichier est une vidéo
+        if (this.file.type.startsWith("video/")) {
+          this.generateThumbnail(this.file); // Capture le thumbnail si c'est une vidéo
+        } else {
+          this.thumbnail = null; // Réinitialise le thumbnail s'il ne s'agit pas d'une vidéo
+        }
+
         this.setupAudio();  // Préparer l'audio
         this.uploadFile();  // Envoyer le fichier au backend et récupérer la transcription
       }
@@ -688,19 +764,18 @@ body {
   border-color: #555 !important;
 }
 
-
-
 .upload-container {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  height: auto;
   background-color: #f4f4f4;
 }
 
 .upload-box {
-  width: 400px;
-  height: 300px;
+  width: auto;
+  height: 60%;
   border: 2px dashed #aaa;
   border-radius: 10px;
   text-align: center;
@@ -913,8 +988,6 @@ textarea {
   /* Texte en blanc pour le mode sombre */
 }
 
-
-
 /* Mode sombre pour .file-container et ses parties */
 .dark .file-container {
   border: 1px solid #555;
@@ -951,7 +1024,7 @@ textarea {
   /* Texte en noir pour le mode clair */
 }
 
-
+.upload-container,
 .stats-container {
   border: 1px solid #333;
   border-radius: 10px;
@@ -965,6 +1038,8 @@ textarea {
   font-family: monospace;
 }
 
+.how-it-works-header,
+.service-description-header,
 .stats-header {
   font-weight: bold;
   border-bottom: 1px solid #333;
@@ -972,10 +1047,13 @@ textarea {
   margin-bottom: 10px;
 }
 
+.how-it-works-body,
+.service-description-body,
 .stats-body {
   padding: 5px 0;
 }
 
+.service-description-subheader,
 .stats-subheader {
   font-weight: bold;
   margin-top: 10px;
@@ -1521,4 +1599,30 @@ ul {
   color: #c0c0c0;
   /* Couleur plus claire pour la barre de progression */
 }
+
+.dots {
+  display: inline-block;
+  margin-left: 5px;
+  font-weight: bold;
+  animation: blink 1.5s steps(5, end) infinite;
+}
+.dark .dots {
+  color: #f0f0f0;
+}
+
+@keyframes blink {
+  0%, 20% {
+    color: transparent;
+  }
+  40% {
+    color: rgb(133, 131, 131);
+  }
+  60% {
+    color: transparent;
+  }
+  80%, 100% {
+    color: black;
+  }
+}
+
 </style>
