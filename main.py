@@ -190,24 +190,30 @@ async def upload_file(file: UploadFile = File(...)):
         file_type = filetype.guess(file_path)
         logging.debug(f"Type de fichier : {file_type.mime}, Extension : {file_type.extension}")
 
+        extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
+
         # Si le fichier est un fichier audio (formats courants)
         if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
             logging.debug(f"fichier audio détecté: {file_extension}.")
+
             # Charger le fichier audio avec Pydub
+            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
             audio = AudioSegment.from_file(file_path)
+            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
+
 
         elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
             logging.debug(f"fichier vidéo détecté: {file_extension}.")
             video_clip = VideoFileClip(file_path)
             logging.debug("Extraction Audio démarrée ...")
 
-            extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
+            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
             logging.debug(extraction_status)
             # yield f"{extraction_status}\n"
 
             audio = AudioSegment.from_file(file_path, format=file_type.extension)
 
-            extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
+            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
             logging.debug(extraction_status)
             # yield f"{extraction_status}\n"
 
