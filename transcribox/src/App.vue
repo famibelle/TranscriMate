@@ -148,7 +148,7 @@
           <button @click.stop="triggerFileInput">Sélectionnez un fichier</button>
           <p>Formats supportés : MP3, MP4, WAV, WebM</p>
         </div>
-        <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*" style="display: none" />
+        <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a" style="display: none" />
       </div>
     </div>
   </div>
