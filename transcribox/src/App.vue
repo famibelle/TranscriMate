@@ -105,14 +105,12 @@
 
         <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
         <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
-          <div class="conversation-header">💬 Conversation<span v-if="isTranscriptionComplete" class="info-icon" title="Clic droit pour renommer">ℹ️</span><span v-if="!isTranscriptionComplete" class="dots">...</span>
+          <div class="conversation-header">💬 Conversation
+            <span v-if="isTranscriptionComplete" class="info-icon" title="Clic gauche pour lire, clic droit pour renommer le locuteur">ℹ️</span><span v-if="!isTranscriptionComplete" class="dots">...</span>
             </div>
-
-          
           <div class="conversation-body">
             <span v-if="isTranscriptionComplete">
-              <p class="instruction">Astuces : 
-                Utilisez le clic droit sur le nom d'un locuteur pour le renommer et le clic gauche pour lire le segment correspondant de la conversation.</p>
+              <p class="instruction">Astuces : Utilisez un LLM sécurisé pour faire le compte rendu de la conversation </p>
             </span>
             <div v-for="(segment, index) in transcriptions" :key="index" class="message"
               :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
