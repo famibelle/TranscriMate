@@ -105,8 +105,15 @@
 
         <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
         <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
-          <div class="conversation-header">💬 Conversation<span v-if="!isTranscriptionComplete" class="dots">...</span></div>
+          <div class="conversation-header">💬 Conversation<span v-if="isTranscriptionComplete" class="info-icon" title="Clic droit pour renommer">ℹ️</span><span v-if="!isTranscriptionComplete" class="dots">...</span>
+            </div>
+
+          
           <div class="conversation-body">
+            <span v-if="isTranscriptionComplete">
+              <p class="instruction">Astuces : 
+                Utilisez le clic droit sur le nom d'un locuteur pour le renommer et le clic gauche pour lire le segment correspondant de la conversation.</p>
+            </span>
             <div v-for="(segment, index) in transcriptions" :key="index" class="message"
               :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
               <div class="message-header">
@@ -158,10 +165,8 @@
           </div>
         </div>
         <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
-          <p>🎵 Déposez votre fichier audio ou vidéo ici</p>
-          <p>ou</p>
+          <p>📁 Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
           <button @click.stop="triggerFileInput">Sélectionnez un fichier</button>
-          <p>Formats supportés : MP3, MP4, WAV, WebM</p>
         </div>
         <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a"
           style="display: none" />
@@ -171,7 +176,7 @@
           <div class="stats-header">🚀 Comment ça marche ?</div>
 
           <ol>
-            <li><strong>Téléchargez</strong> votre fichier audio ou vidéo.</li>
+            <li><strong>Uploader</strong> votre fichier audio ou vidéo.</li>
             <li><strong>Traitement automatique</strong> : Notre IA transcrit et identifie les différents locuteurs.</li>
             <li><strong>Téléchargez la transcription</strong> avec la distinction de chaque intervenant.</li>
           </ol>
@@ -181,8 +186,9 @@
         <!-- Exemple de sortie pour montrer la séparation des voix -->
         <div class="stats-container">
           <div class="stats-header">✨ Exemple de sortie</div>
-          <p><strong>SPEAKER_1</strong> : Bonjour, comment allez-vous ?</p>
-          <p><strong>SPEAKER_2</strong> : Très bien, merci. Et vous ?</p>
+          <p><strong>Alice</strong> : Bonjour, comment allez-vous ?</p>
+          <p><strong>Bob</strong> : Très bien, merci. Et vous ?</p>
+          <p><strong>Clara</strong> : Impeccable !</p>
         </div>
       </div>
 
@@ -908,6 +914,20 @@ button:hover {
   /* Ajuste la distance entre le texte et l'emoji */
 }
 
+.speaker:hover::after {
+  content: "💡 Clic droit pour renommer, clic gauche pour lire";
+  position: absolute;
+  top: 100%; /* Positionne l'infobulle juste en dessous */
+  left: 50%;
+  background-color: #333;
+  color: #fff;
+  padding: 5px;
+  border-radius: 5px;
+  white-space: nowrap;
+  z-index: 10;
+  opacity: 0.9;
+}
+
 textarea {
   width: 100%;
   height: 200px;
@@ -1625,4 +1645,17 @@ ul {
   }
 }
 
+.instruction {
+  font-size: 0.85em;
+  color: #666;
+  margin-top: 5px;
+  text-align: center;
+}
+
+.info-icon {
+  font-size: 0.75em;
+  color: #666;
+  margin-left: 5px;
+  cursor: help;
+}
 </style>
