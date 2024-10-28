@@ -869,12 +869,15 @@ button:hover {
   margin: 0;
 }
 
+
+
 .chunk {
   font-family: 'Roboto', sans-serif;
   border-radius: 2px;
   cursor: pointer;
   font-size: 14px;
   line-height: 1.4;
+  position: relative; /* Nécessaire pour positionner l'infobulle */
 }
 
 .chunk:hover {
@@ -882,6 +885,28 @@ button:hover {
   /* Ajouter un surlignage doux lors du hover */
 }
 
+.chunk::after {
+  content: "💡 Clic droit pour lire";
+  position: absolute;
+  top: -120%; /* Positionne l'infobulle juste au-dessus du chunk */
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: #fff;
+  padding: 5px;
+  border-radius: 5px;
+  white-space: nowrap;
+  font-size: 0.9em;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.chunk:hover::after {
+  opacity: 0.9; /* Affiche l'infobulle */
+  transition-delay: 0.4s; /* Délai d'apparition de 400 ms */
+}
 
 /* Style pour rendre le texte du speaker cliquable */
 .speaker {
@@ -1253,6 +1278,7 @@ li {
   /* Surlignage au survol */
   border-radius: 4px;
 }
+
 
 .edit-input {
   width: 100%;
