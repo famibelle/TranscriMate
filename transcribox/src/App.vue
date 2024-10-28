@@ -74,7 +74,7 @@
           <div v-if="progressMessage">
             <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
             {{ progressMessage }}
-            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👅</span>
+            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">🗣️</span>
           </div>
           <div class="progress-bar-body">
             <!-- Barre de progression ASCII pour la transcription globale -->
