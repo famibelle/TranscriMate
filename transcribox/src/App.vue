@@ -914,18 +914,27 @@ button:hover {
   /* Ajuste la distance entre le texte et l'emoji */
 }
 
-.speaker:hover::after {
+.speaker::after {
   content: "💡 Clic droit pour renommer, clic gauche pour lire";
   position: absolute;
-  top: 100%; /* Positionne l'infobulle juste en dessous */
-  left: 50%;
+  top: 50%;
+  left: 105%;
+  transform: translateY(-50%);
   background-color: #333;
   color: #fff;
   padding: 5px;
   border-radius: 5px;
   white-space: nowrap;
+  font-size: 0.9em;
   z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.speaker:hover::after {
   opacity: 0.9;
+  transition-delay: 0.4s; /* Délai d'apparition de 400 ms */
 }
 
 textarea {
