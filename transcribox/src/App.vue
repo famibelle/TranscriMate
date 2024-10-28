@@ -162,11 +162,38 @@
           </div>
         </div>
         <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
-          <p>📁 Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
-          <button @click.stop="triggerFileInput">Sélectionnez un fichier</button>
+          <p>Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
+          <button @click.stop="triggerFileInput">📁 Sélectionnez un fichier</button>
+
+
+        <!-- Bouton d'enregistrement rond -->
+        <div class="record-button-wrapper">
+          <button 
+            @click.stop="toggleRecording" 
+            class="record-button"
+            :class="{ 'record-button--recording': isRecording }"
+            :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'"
+          >
+            <span class="record-button__inner">🎙️</span>
+          </button>
+          
+          <!-- Label sous le bouton -->
+          <span class="record-button__label">
+            {{ isRecording ? 'Stop' : 'Enregistrer' }}
+          </span>
         </div>
+
+        
+
+        </div>
+
         <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a"
           style="display: none" />
+
+      <!-- Affichage du temps d'enregistrement -->
+      <div v-if="isRecording" class="recording-timer">
+        Enregistrement en cours: {{ formatTime(recordingTime) }}
+      </div>
 
         <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
         <div class="stats-container">
@@ -197,6 +224,13 @@
 export default {
   data() {
     return {
+      isRecording: false, // État de l'enregistrement
+      mediaRecorder: null, // Instance du MediaRecorder
+      audioChunks: [],
+      recordingTime: 0,
+      timerInterval: null,
+      stream: null,
+
       thumbnail: null, // URL de l'image thumbnail
       extraction_audio_status: "🔄 Extraction audio en cours...",
       touchTimer: null,
@@ -248,6 +282,99 @@ export default {
   },
 
   methods: {
+    async toggleRecording() {
+      if (!this.isRecording) {
+        try {
+          this.stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          });
+
+          this.mediaRecorder = new MediaRecorder(this.stream);
+          
+          this.mediaRecorder.ondataavailable = (event) => {
+            this.audioChunks.push(event.data);
+          };
+          
+          this.mediaRecorder.onstop = async () => {
+            // Utiliser le temps d'enregistrement comme durée
+            this.audioDuration = this.recordingTime;
+            
+            const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+            const audioFile = new File([audioBlob], 'recording.wav', { 
+              type: 'audio/wav',
+              lastModified: Date.now()
+            });
+            
+            // Ajouter la durée aux métadonnées du fichier
+            Object.defineProperty(audioFile, 'duration', {
+              value: this.recordingTime,
+              writable: false
+            });
+
+            this.handleRecordedAudio(audioFile);
+          };
+          
+          // Réinitialiser les variables
+          this.audioChunks = [];
+          this.recordingTime = 0;
+          this.startTime = Date.now();
+          
+          // Démarrer l'enregistrement
+          this.mediaRecorder.start();
+          this.isRecording = true;
+          this.startTimer();
+          
+        } catch (err) {
+          console.error('Erreur lors de l\'accès au microphone:', err);
+          alert('Impossible d\'accéder au microphone. Veuillez vérifier les permissions.');
+        }
+      } else {
+        // Arrêt de l'enregistrement
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+          this.mediaRecorder.stop();
+        }
+        if (this.stream) {
+          this.stream.getTracks().forEach(track => track.stop());
+        }
+        this.isRecording = false;
+        this.stopTimer();
+      }
+    },    
+
+    startTimer() {
+      this.timerInterval = setInterval(() => {
+        // Calculer le temps écoulé en secondes
+        this.recordingTime = Math.round((Date.now() - this.startTime) / 1000);
+      }, 1000);
+    },
+
+    stopTimer() {
+      if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+      }
+    },
+   
+    handleRecordedAudio(audioFile) {
+      // Utiliser directement this.recordingTime comme durée
+      console.log('Durée de l\'enregistrement:', this.formatTime(this.recordingTime));
+      
+      // Appeler votre méthode de traitement du fichier
+      this.onFileChange({ target: { files: [audioFile] } });
+    },
+
+    beforeDestroy() {
+    this.stopTimer();
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+    }
+  },
+
+
     // Capture un thumbnail de la vidéo sélectionnée
     generateThumbnail(file) {
       // Vérification de l'existence de l'élément vidéo
@@ -399,13 +526,19 @@ export default {
     },
 
     // Formater le temps en minutes et secondes
+    // formatTime(seconds) {
+    //   if (seconds === "...") {
+    //     return "...";
+    //   }
+    //   const minutes = Math.floor(seconds / 60);
+    //   const remainingSeconds = Math.floor(seconds % 60);
+    //   return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
+    // },
     formatTime(seconds) {
-      if (seconds === "...") {
-        return "...";
-      }
+      if (!seconds || !isFinite(seconds)) return '00:00';
       const minutes = Math.floor(seconds / 60);
       const remainingSeconds = Math.floor(seconds % 60);
-      return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
+      return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
     },
 
     playOrPauseChunk(audioUrl, startTime, endTime, chunkIndex) {
@@ -1689,5 +1822,117 @@ ul {
   color: #666;
   margin-left: 5px;
   cursor: help;
+}
+
+.record-button-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.record-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  padding: 0;
+  border: none;
+  background-color: #ffffff;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.record-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.record-button__inner {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #ff4444;
+  transition: all 0.3s ease;
+}
+
+.record-button--recording .record-button__inner {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  animation: pulse 2s infinite;
+}
+
+.record-button__label {
+  font-size: 0.875rem;
+  color: #666;
+  user-select: none;
+}
+
+.record-timer {
+  margin-top: 1rem;
+  text-align: center;
+  color: #ff4444;
+  font-weight: 500;
+  font-size: 1.125rem;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Si vous avez besoin de gérer la disposition des boutons */
+.buttons-container {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+/* Style alternatif avec bordure */
+/* Décommentez ces styles si vous préférez une version avec bordure */
+
+.record-button {
+  border: 2px solid #ff4444;
+}
+
+.record-button--recording {
+  border-color: #cc0000;
+  animation: borderPulse 2s infinite;
+}
+
+@keyframes borderPulse {
+  0% {
+    border-color: #ff4444;
+  }
+  50% {
+    border-color: #cc0000;
+  }
+  100% {
+    border-color: #ff4444;
+  }
+}
+
+.recording-timer {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 1.2rem;
+  color: #ff4444;
 }
 </style>
