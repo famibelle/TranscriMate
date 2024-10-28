@@ -110,7 +110,7 @@
             </div>
           <div class="conversation-body">
             <span v-if="isTranscriptionComplete">
-              <p class="instruction">Astuces : Utilisez un LLM sécurisé pour faire le compte rendu de la conversation </p>
+              <p class="instruction">Astuce : Utilisez un LLM sécurisé pour faire le compte rendu de la conversation </p>
             </span>
             <div v-for="(segment, index) in transcriptions" :key="index" class="message"
               :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
