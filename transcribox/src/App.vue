@@ -72,9 +72,9 @@
             <pre>{{ progressBarExtractionAudio }}</pre>
           </div>
           <div v-if="progressMessage">
-            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
-            {{ progressMessage }}
             <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">🗣️</span>
+            {{ progressMessage }}
+            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
           </div>
           <div class="progress-bar-body">
             <!-- Barre de progression ASCII pour la transcription globale -->
@@ -156,10 +156,9 @@
       <div v-else class="upload-container">
         <!-- Titre principal et sous-titre pour clarifier la fonction du service -->
         <div class="stats-container">
-          <div class="stats-header">🎙️ Service de Transcription et Séparation des Voix</div>
+          <div class="stats-header">🎙️ Convertissez vos fichiers audio et vidéo en texte, avec identification des intervenants</div>
           <div class="stats-body">
-            <p>Convertissez vos fichiers audio et vidéo en texte, avec une distinction automatique des
-              locuteurs.</p>
+            <p>Déposez un fichier audio ou vidéo, et notre IA extrait automatiquement la bande son, sépare les voix et transforme chaque parole en texte associé à son locuteur.</p>
           </div>
         </div>
         <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
@@ -174,9 +173,9 @@
           <div class="stats-header">🚀 Comment ça marche ?</div>
 
           <ol>
-            <li><strong>Uploader</strong> votre fichier audio ou vidéo.</li>
-            <li><strong>Traitement automatique</strong> : Notre IA transcrit et identifie les différents locuteurs.</li>
-            <li><strong>Téléchargez la transcription</strong> avec la distinction de chaque intervenant.</li>
+            <li><strong>Ajoutez un fichier:</strong> 📂glissez-déposez un fichier audio ou vidéo dans l’espace ci-dessus.</li>
+            <li><strong>Traitement automatique:</strong> notre technologie d'IA extrait la bande son 📞, distingue chaque voix 👥 et crée une transcription complète, organisée par intervenant.</li>
+            <li><strong>Copiez la transcription:</strong> obtenez un document textuel clair et structuré, prêt à être copié 📋 et utilisé où vous le souhaitez.</li>
           </ol>
 
         </div>
