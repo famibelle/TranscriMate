@@ -886,7 +886,7 @@ button:hover {
 }
 
 .chunk::after {
-  content: "💡 Clic droit pour lire";
+  content: "🖱️ Clic pour écouter";
   position: absolute;
   top: -120%; /* Positionne l'infobulle juste au-dessus du chunk */
   left: 50%;
@@ -937,7 +937,7 @@ button:hover {
 }
 
 .speaker::after {
-  content: "💡 Clic droit pour renommer, clic gauche pour lire";
+  content: "💡 Clic droit pour renommer, clic gauche pour écouter";
   position: absolute;
   top: 50%;
   left: 105%;
