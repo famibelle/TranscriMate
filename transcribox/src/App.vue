@@ -526,20 +526,21 @@ export default {
     },
 
     // Formater le temps en minutes et secondes
-    // formatTime(seconds) {
-    //   if (seconds === "...") {
-    //     return "...";
-    //   }
-    //   const minutes = Math.floor(seconds / 60);
-    //   const remainingSeconds = Math.floor(seconds % 60);
-    //   return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
-    // },
     formatTime(seconds) {
-      if (!seconds || !isFinite(seconds)) return '00:00';
+      if (seconds === "...") {
+        return "...";
+      }
       const minutes = Math.floor(seconds / 60);
       const remainingSeconds = Math.floor(seconds % 60);
-      return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+      return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
     },
+
+    //  formatTime(seconds) {
+    //   if (!seconds || !isFinite(seconds)) return '00:00';
+    //   const minutes = Math.floor(seconds / 60);
+    //   const remainingSeconds = Math.floor(seconds % 60);
+    //   return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    // },
 
     playOrPauseChunk(audioUrl, startTime, endTime, chunkIndex) {
       // Si un audio est déjà en cours de lecture et qu'il s'agit du même chunk, on le met en pause
