@@ -164,8 +164,7 @@
         <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
           <p>Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
           <button @click.stop="triggerFileInput">📁 Sélectionnez un fichier</button>
-
-
+          <p>ou</p>
         <!-- Bouton d'enregistrement rond -->
         <div class="record-button-wrapper">
           <button 
@@ -179,7 +178,7 @@
           
           <!-- Label sous le bouton -->
           <span class="record-button__label">
-            {{ isRecording ? 'Stop' : 'Enregistrer' }}
+            {{ isRecording ? 'Stop' : 'Enregistrer la conversation directement' }}
           </span>
         </div>
 
