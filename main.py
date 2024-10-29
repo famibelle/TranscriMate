@@ -46,8 +46,6 @@ Model_dir = '/mnt/Models'
 HUGGING_FACE_KEY =  os.environ.get("HuggingFace_API_KEY")
 server_url = os.getenv("SERVER_URL")
 
-
-
 # Dossier pour les transcriptions
 output_dir = "Transcriptions"
 os.makedirs(output_dir, exist_ok=True)
@@ -68,6 +66,9 @@ if torch.cuda.is_available():
     print(f"GPU trouvé! on utilise CUDA. Device: {device}")
 else:
     print(f"Pas de GPU de disponible... Device: {device}")
+
+current_settings = {}  # Stocke les paramètres actuels
+
 
 # Charger les modèles
 # diarization_model = Pipeline.from_pretrained("pyannote/speaker-diarization")
@@ -95,16 +96,19 @@ model_selected  = [
         "openai/whisper-large",
     ]
 
-whisper_task_transcribe = "transcribe" 
+# whisper_task_transcribe = "transcribe" 
 # generate_kwargs={"language": "french"}), 
 # generate_kwargs={"task": "translate"}),
 # generate_kwargs={"language": "french", "task": "translate"})
 
+model_settings = current_settings.get("model", "openai/whisper-large-v3-turbo")  # Valeur par défaut si non définie
 
 Transcriber_Whisper = pipeline(
         "automatic-speech-recognition",
-        model = model_selected[0],
+        # model = model_selected[0],
+        model = model_settings,
         chunk_length_s=30,
+        stride_length_s=(4, 2),
         device=device    
     )
 
@@ -178,9 +182,9 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 class Settings(BaseModel):
-    task: StrictStr
-    model: StrictStr
-    lang: StrictStr
+    task: StrictStr = "transcribe"
+    model: StrictStr = "openai/whisper-large-v3-turbo"  # Valeur par défaut
+    lang: StrictStr = "auto"  # Valeur par défaut
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -205,10 +209,13 @@ class Settings(BaseModel):
         if self.lang not in ["auto", "fr", "en"]:
             raise ValueError("Language must be 'fr', 'en', or 'auto'")
 
-@app.post("/settings")
+
+@app.post("/settings/")
 def update_settings(settings: Settings):
     # Logique de mise à jour des paramètres côté backend
     # Enregistrez les paramètres dans une base de données ou un fichier de configuration, par exemple
+    global current_settings
+    current_settings = settings.model_dump()  # Mettez à jour la variable globale
     return {"message": "Paramètres mis à jour avec succès"}
 
 
@@ -227,6 +234,9 @@ async def upload_file(file: UploadFile = File(...)):
     #     print(f"Audio extrait avec succès. Durée : {len(audio) / 1000} secondes")
     #     # Vous pouvez maintenant utiliser l'objet audio (AudioSegment) comme vous le souhaitez
     #     # Par exemple : audio.export("sortie.mp3", format="mp3")    
+
+    # Utilise les paramètres de transcription
+    task = current_settings.get("task", "transcribe")  # Prend la valeur par défaut si non définie
 
     try:
         # Sauvegarder temporairement le fichier uploadé
@@ -328,12 +338,14 @@ async def upload_file(file: UploadFile = File(...)):
                 segment_audio.export(segment_path, format="wav")
 
                 # Transcrire ce segment avec Whisper
+                logging.debug(f"Transcription démarée avec le model <{model_settings}> et la task <{task}>")
+
                 transcription = Transcriber_Whisper(
                     segment_path,
                     # input_features= segment_path, 
                     return_timestamps = True, 
                     # return_timestamps="word",
-                    generate_kwargs={"task": whisper_task_transcribe}
+                    generate_kwargs={"task": task}
                 )
 
                 # Supprimer le fichier de segment une fois transcrit

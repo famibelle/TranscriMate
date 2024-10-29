@@ -7,7 +7,6 @@
         <div class="file-container">
           <div class="file-header">📁 Fichier
             <div class="settings-group">
-              <button @click="openSettings" class="settings-button">⚙️</button>
               <button @click="toggleDarkMode" class="settings-button">{{ isDarkMode ? "🌞" : "🌙" }}</button>
             </div>
           </div>
@@ -18,42 +17,7 @@
             </div>
           </div>
 
-          <!-- Fenêtre modale pour les paramètres de transcription -->
-          <div v-if="showSettingsModal" class="settings-modal">
-    <h3>Settings</h3>
-    <div>
-      <label>
-        <input type="radio" v-model="settings.task" value="transcribe" />
-        Transcribe
-      </label>
-      <label>
-        <input type="radio" v-model="settings.task" value="translate" />
-        Translate
-      </label>
-    </div>
-    <div>
-      <label>Model:</label>
-      <select v-model="settings.model">
-        <option v-for="model in availableModels" :value="model">{{ model }}</option>
-      </select>
-    </div>
-    <div>
-      <label>
-        <input type="radio" v-model="settings.lang" value="fr" />
-        French
-      </label>
-      <label>
-        <input type="radio" v-model="settings.lang" value="en" />
-        English
-      </label>
-      <label>
-        <input type="radio" v-model="settings.lang" value="auto" />
-        Auto
-      </label>
-    </div>
-    <button @click="saveSettings">Save</button>
-    <button @click="closeSettings">Close</button>
-  </div>
+
         </div>
 
         <!-- Section audio-player avec style similaire à stats-container -->
@@ -230,8 +194,50 @@
           <p><strong>Bob</strong> : Très bien, merci. Et vous ?</p>
           <p><strong>Clara</strong> : Impeccable !</p>
         </div>
-      </div>
 
+        <!-- Paramètre -->
+        <div class="stats-container">
+          <div class="stats-header"><button @click="openSettings" class="settings-button">⚙️</button>Paramètres</div>
+          <div class="settings-group">
+            </div>
+          <!-- Fenêtre modale pour les paramètres de transcription -->
+          <div v-if="showSettingsModal" class="settings-modal">
+              <h3>Settings</h3>
+              <div>
+                <label>
+                  <input type="radio" v-model="settings.task" value="transcribe" />
+                  Transcribe
+                </label>
+                <label>
+                  <input type="radio" v-model="settings.task" value="translate" />
+                  Translate
+                </label>
+              </div>
+              <div>
+                <!-- <label>Model:</label>
+                <select v-model="settings.model">
+                  <option v-for="model in availableModels" :value="model">{{ model }}</option>
+                </select> -->
+              </div>
+              <div>
+                <label>
+                  <input type="radio" v-model="settings.lang" value="fr" />
+                  French
+                </label>
+                <label>
+                  <input type="radio" v-model="settings.lang" value="en" />
+                  English
+                </label>
+                <label>
+                  <input type="radio" v-model="settings.lang" value="auto" />
+                  Auto
+                </label>
+              </div>
+              <button @click="saveSettings">Save</button>
+              <button @click="closeSettings">Close</button>
+            </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -552,16 +558,20 @@ export default {
       this.showSettingsModal = true;
     },
     closeSettings() {
-      this.showSettings = false; // Fermer la fenêtre modale
+      this.showSettingsModal = false; // Fermer la fenêtre modale
     },
 
     async saveSettings() {
       try {
-        await axios.post('/settings', this.settings);
-        console.log('Settings saved successfully');
-      } catch (error) {
-        console.error('Error saving settings:', error);
-      }
+      console.log('Settings being sent:', this.settings);
+      const response = await axios.post('/settings/', this.settings);
+      console.log('Response:', response.data);
+    } catch (error) {
+      console.log('Full error:', error);
+      console.log('Request config:', error.config);
+      console.log('Request URL:', error.config.url);
+      console.error('Error saving settings:', error);
+    }
       this.closeSettings();
     },
 
