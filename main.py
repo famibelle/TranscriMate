@@ -24,6 +24,9 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 import sys
+from pydantic import BaseModel, StrictStr, StrictBool
+
+
 
 from dotenv import load_dotenv
 import torch
@@ -42,6 +45,7 @@ Model_dir = '/mnt/Models'
 
 HUGGING_FACE_KEY =  os.environ.get("HuggingFace_API_KEY")
 server_url = os.getenv("SERVER_URL")
+
 
 
 # Dossier pour les transcriptions
@@ -90,6 +94,12 @@ model_selected  = [
         "openai/whisper-base",
         "openai/whisper-large",
     ]
+
+whisper_task_transcribe = "transcribe" 
+# generate_kwargs={"language": "french"}), 
+# generate_kwargs={"task": "translate"}),
+# generate_kwargs={"language": "french", "task": "translate"})
+
 
 Transcriber_Whisper = pipeline(
         "automatic-speech-recognition",
@@ -165,6 +175,43 @@ async def upload_file(file: UploadFile = File(...)):
         if os.path.exists(file_path):
             os.remove(file_path)
             logging.debug(f"Fichier temporaire {file_path} supprimé.")
+
+
+class Settings(BaseModel):
+    task: StrictStr
+    model: StrictStr
+    lang: StrictStr
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.validate()
+
+    def validate(self):
+        if self.task not in ["transcribe", "translate"]:
+            raise ValueError("Task must be 'transcribe' or 'translate'")
+
+        allowed_models = [
+            "openai/whisper-large-v3-turbo",
+            "openai/whisper-large-v3",
+            "openai/whisper-tiny",
+            "openai/whisper-small",
+            "openai/whisper-medium",
+            "openai/whisper-base",
+            "openai/whisper-large"
+        ]
+        if self.model not in allowed_models:
+            raise ValueError("Invalid model")
+
+        if self.lang not in ["auto", "fr", "en"]:
+            raise ValueError("Language must be 'fr', 'en', or 'auto'")
+
+@app.post("/settings")
+def update_settings(settings: Settings):
+    # Logique de mise à jour des paramètres côté backend
+    # Enregistrez les paramètres dans une base de données ou un fichier de configuration, par exemple
+    return {"message": "Paramètres mis à jour avec succès"}
+
+
 
 @app.post("/uploadfile/")
 async def upload_file(file: UploadFile = File(...)):
@@ -286,7 +333,7 @@ async def upload_file(file: UploadFile = File(...)):
                     # input_features= segment_path, 
                     return_timestamps = True, 
                     # return_timestamps="word",
-                    generate_kwargs={"task": "transcribe"}
+                    generate_kwargs={"task": whisper_task_transcribe}
                 )
 
                 # Supprimer le fichier de segment une fois transcrit

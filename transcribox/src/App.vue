@@ -19,24 +19,41 @@
           </div>
 
           <!-- Fenêtre modale pour les paramètres de transcription -->
-          <div v-if="showSettings" class="settings-modal">
-            <div class="settings-content">
-              <h3>Paramètres de transcription</h3>
-              <label for="model-select">Choisir le modèle de transcription :</label>
-              <select id="model-select" v-model="selectedModel">
-                <option value="openai/whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
-                <option value="openai/whisper-large-v3">Whisper Large v3</option>
-                <option value="openai/whisper-tiny">Whisper Tiny</option>
-                <option value="openai/whisper-small">Whisper Small</option>
-                <option value="openai/whisper-medium">Whisper Medium</option>
-                <option value="openai/whisper-base">Whisper Base</option>
-                <option value="openai/whisper-large">Whisper Large</option>
-              </select>
-              <br /><br />
-              <button @click="saveSettings">Enregistrer</button>
-              <button @click="closeSettings">Annuler</button>
-            </div>
-          </div>
+          <div v-if="showSettingsModal" class="settings-modal">
+    <h3>Settings</h3>
+    <div>
+      <label>
+        <input type="radio" v-model="settings.task" value="transcribe" />
+        Transcribe
+      </label>
+      <label>
+        <input type="radio" v-model="settings.task" value="translate" />
+        Translate
+      </label>
+    </div>
+    <div>
+      <label>Model:</label>
+      <select v-model="settings.model">
+        <option v-for="model in availableModels" :value="model">{{ model }}</option>
+      </select>
+    </div>
+    <div>
+      <label>
+        <input type="radio" v-model="settings.lang" value="fr" />
+        French
+      </label>
+      <label>
+        <input type="radio" v-model="settings.lang" value="en" />
+        English
+      </label>
+      <label>
+        <input type="radio" v-model="settings.lang" value="auto" />
+        Auto
+      </label>
+    </div>
+    <button @click="saveSettings">Save</button>
+    <button @click="closeSettings">Close</button>
+  </div>
         </div>
 
         <!-- Section audio-player avec style similaire à stats-container -->
@@ -220,6 +237,9 @@
 </template>
 
 <script>
+
+import axios from 'axios';
+
 export default {
   data() {
     return {
@@ -229,6 +249,23 @@ export default {
       recordingTime: 0,
       timerInterval: null,
       stream: null,
+
+      showSettingsModal: false,
+      settings: {
+        task: "transcribe",
+        model: "openai/whisper-large-v3-turbo",
+        lang: "auto",
+      },
+      availableModels: [
+        "openai/whisper-large-v3-turbo",
+        "openai/whisper-large-v3",
+        "openai/whisper-tiny",
+        "openai/whisper-small",
+        "openai/whisper-medium",
+        "openai/whisper-base",
+        "openai/whisper-large",
+      ],
+
 
       thumbnail: null, // URL de l'image thumbnail
       extraction_audio_status: "🔄 Extraction audio en cours...",
@@ -512,16 +549,20 @@ export default {
 
     // Ouvrir les paramètres (à personnaliser)
     openSettings() {
-      this.showSettings = true; // Ouvrir la fenêtre modale des paramètres
+      this.showSettingsModal = true;
     },
-
     closeSettings() {
       this.showSettings = false; // Fermer la fenêtre modale
     },
-    saveSettings() {
-      this.showSettings = false; // Fermer les paramètres une fois enregistrés
-      alert(`Modèle de transcription sélectionné : ${this.selectedModel}`);
-      // Logique supplémentaire pour enregistrer les paramètres si nécessaire
+
+    async saveSettings() {
+      try {
+        await axios.post('/settings', this.settings);
+        console.log('Settings saved successfully');
+      } catch (error) {
+        console.error('Error saving settings:', error);
+      }
+      this.closeSettings();
     },
 
     // Formater le temps en minutes et secondes
@@ -777,7 +818,8 @@ export default {
 
       try {
         //  const response = await fetch('http://localhost:8000/uploadfile/', {
-        const response = await fetch(`${process.env.VUE_APP_API_URL}/uploadfile/`, {
+        // const response = await fetch(`${process.env.VUE_APP_API_URL}/uploadfile/`, {
+          const response = await fetch(`/uploadfile/`, {
           method: 'POST',
           body: formData
         });
