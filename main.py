@@ -108,7 +108,7 @@ Transcriber_Whisper = pipeline(
         # model = model_selected[0],
         model = model_settings,
         chunk_length_s=30,
-        stride_length_s=(4, 2),
+        # stride_length_s=(4, 2),
         device=device    
     )
 

@@ -202,16 +202,12 @@
             </div>
           <!-- Fenêtre modale pour les paramètres de transcription -->
           <div v-if="showSettingsModal" class="settings-modal">
-              <h3>Settings</h3>
               <div>
-                <label>
-                  <input type="radio" v-model="settings.task" value="transcribe" />
-                  Transcribe
-                </label>
-                <label>
-                  <input type="radio" v-model="settings.task" value="translate" />
-                  Translate
-                </label>
+
+
+                <div>
+    <TaskToggle v-model="settings.task" />
+  </div>
               </div>
               <div>
                 <!-- <label>Model:</label>
@@ -220,18 +216,6 @@
                 </select> -->
               </div>
               <div>
-                <label>
-                  <input type="radio" v-model="settings.lang" value="fr" />
-                  French
-                </label>
-                <label>
-                  <input type="radio" v-model="settings.lang" value="en" />
-                  English
-                </label>
-                <label>
-                  <input type="radio" v-model="settings.lang" value="auto" />
-                  Auto
-                </label>
               </div>
               <button @click="saveSettings">Save</button>
               <button @click="closeSettings">Close</button>
@@ -245,10 +229,19 @@
 <script>
 
 import axios from 'axios';
+import TaskToggle from './components/TaskToggle.vue'
 
 export default {
+  components: {
+    TaskToggle
+  },
+
   data() {
     return {
+      settings: {
+        task: 'transcribe' // valeur par défaut
+      },
+
       isRecording: false, // État de l'enregistrement
       mediaRecorder: null, // Instance du MediaRecorder
       audioChunks: [],
