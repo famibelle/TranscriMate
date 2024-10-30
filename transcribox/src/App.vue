@@ -203,10 +203,9 @@
           <!-- Fenêtre modale pour les paramètres de transcription -->
           <div v-if="showSettingsModal" class="settings-modal">
               <div>
-
-
                 <div>
-    <TaskToggle v-model="settings.task" />
+    <TaskToggle v-model="settings.task" @save="saveSettings"
+    />
   </div>
               </div>
               <div>
@@ -238,9 +237,6 @@ export default {
 
   data() {
     return {
-      settings: {
-        task: 'transcribe' // valeur par défaut
-      },
 
       isRecording: false, // État de l'enregistrement
       mediaRecorder: null, // Instance du MediaRecorder
@@ -251,10 +247,11 @@ export default {
 
       showSettingsModal: false,
       settings: {
-        task: "transcribe",
+        task: "trancribe", // valeur par défaut
         model: "openai/whisper-large-v3-turbo",
         lang: "auto",
       },
+
       availableModels: [
         "openai/whisper-large-v3-turbo",
         "openai/whisper-large-v3",
@@ -814,7 +811,6 @@ export default {
       this.progressData = {}; // Stocker le statut de progression
 
       this.startProgressLoop(); // Démarre la boucle de progression
-
 
       const formData = new FormData();
       formData.append('file', this.file);
@@ -1877,12 +1873,12 @@ ul {
 }
 
 .record-button {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   padding: 0;
   border: none;
-  background-color: #ffffff;
+  background-color: #f70505;
   cursor: pointer;
   position: relative;
   display: flex;
