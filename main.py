@@ -67,8 +67,13 @@ if torch.cuda.is_available():
 else:
     print(f"Pas de GPU de disponible... Device: {device}")
 
-current_settings = {}  # Stocke les paramètres actuels
-
+# Initialisation de `current_settings` avec des valeurs par défaut
+# global current_settings
+current_settings = {
+    "task": "transcribe",
+    "model": "openai/whisper-large-v3-turbo",
+    "lang": "auto"
+}
 
 # Charger les modèles
 # diarization_model = Pipeline.from_pretrained("pyannote/speaker-diarization")
@@ -212,12 +217,13 @@ class Settings(BaseModel):
 
 @app.post("/settings/")
 def update_settings(settings: Settings):
+    global current_settings
     # Logique de mise à jour des paramètres côté backend
     # Enregistrez les paramètres dans une base de données ou un fichier de configuration, par exemple
-    global current_settings
     current_settings = settings.model_dump()  # Mettez à jour la variable globale
-    return {"message": "Paramètres mis à jour avec succès"}
+    logging.debug(f"Settings: {current_settings}, task: {current_settings['task']}")
 
+    return {"message": "Paramètres mis à jour avec succès"}
 
 
 @app.post("/uploadfile/")
@@ -236,7 +242,9 @@ async def upload_file(file: UploadFile = File(...)):
     #     # Par exemple : audio.export("sortie.mp3", format="mp3")    
 
     # Utilise les paramètres de transcription
-    task = current_settings.get("task", "transcribe")  # Prend la valeur par défaut si non définie
+    task = current_settings.get("transcribe")  # Prend la valeur par défaut si non définie
+    # generate_kwargs={"language": "english"}
+    # generate_kwargs={"task": "translate"})
 
     try:
         # Sauvegarder temporairement le fichier uploadé
@@ -337,17 +345,21 @@ async def upload_file(file: UploadFile = File(...)):
                 segment_path = f"/tmp/segment_{start_ms}_{end_ms}.wav"
                 segment_audio.export(segment_path, format="wav")
 
+                logging.debug(f"----> Transcription démarée avec le model <{model_settings}> et la task <{task}> <----")
+
+                if current_settings['task'] != "transcribe":
+                    transcription = Transcriber_Whisper(
+                        segment_path,
+                        return_timestamps = True,
+                        generate_kwargs={"language": "french"} 
+                        # generate_kwargs={"language": "english"} 
+                        )
+                else:
+                    transcription = Transcriber_Whisper(
+                        segment_path,
+                        return_timestamps = True
+                    )
                 # Transcrire ce segment avec Whisper
-                logging.debug(f"Transcription démarée avec le model <{model_settings}> et la task <{task}>")
-
-                transcription = Transcriber_Whisper(
-                    segment_path,
-                    # input_features= segment_path, 
-                    return_timestamps = True, 
-                    # return_timestamps="word",
-                    generate_kwargs={"task": task}
-                )
-
                 # Supprimer le fichier de segment une fois transcrit
                 # os.remove(segment_path)
 
