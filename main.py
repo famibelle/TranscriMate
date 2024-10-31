@@ -4,13 +4,25 @@ import threading
 
 import filetype
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket
 from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+from starlette.websockets import WebSocketDisconnect
+
+import io
+
+import filetype
+import logging
+from pydub import AudioSegment
+from moviepy.editor import VideoFileClip
+import os
+import tempfile
+
 
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 
-from fastapi.middleware.cors import CORSMiddleware
 
 from json import dumps
 
@@ -25,8 +37,6 @@ logging.basicConfig(level=logging.DEBUG)
 
 import sys
 from pydantic import BaseModel, StrictStr, StrictBool
-
-
 
 from dotenv import load_dotenv
 import torch
@@ -116,6 +126,15 @@ Transcriber_Whisper = pipeline(
         # stride_length_s=(4, 2),
         device=device    
     )
+
+Transcriber_Whisper_live = pipeline(
+        "automatic-speech-recognition",
+        model = "openai/whisper-tiny",
+        chunk_length_s=30,
+        # stride_length_s=(4, 2),
+        device=device    
+    )
+
 
 app = FastAPI()
 app.add_middleware(
@@ -351,8 +370,8 @@ async def upload_file(file: UploadFile = File(...)):
                     transcription = Transcriber_Whisper(
                         segment_path,
                         return_timestamps = True,
-                        generate_kwargs={"language": "french"} 
-                        # generate_kwargs={"language": "english"} 
+                        # generate_kwargs={"language": "french"} 
+                        generate_kwargs={"language": "english"} 
                         )
                 else:
                     transcription = Transcriber_Whisper(
@@ -485,6 +504,56 @@ async def process_audio(file: UploadFile = File(...)):
             os.remove(audio_path)
             logging.debug(f"Fichier temporaire {audio_path} supprimé.")
 
+
+@app.websocket("/streaming_audio")
+async def websocket_audio_receiver(websocket: WebSocket):
+    await websocket.accept()
+    print("----------------------------------------------> Client connected, awaiting your data")
+
+    chunk_size = 1024 * 64  # Taille des chunks en bytes, ajustez selon vos besoins
+
+    try:
+        while True:
+            print("----------------------------------------------> Données reçues")
+
+            data = await websocket.receive_bytes()
+            # Traiter les données audio ici, comme les enregistrer ou les traiter pour une reconnaissance vocale
+
+            # Convertir le chunk reçu en AudioSegment pour analyser sa durée
+            audio_segment = AudioSegment.from_raw(
+                io.BytesIO(data),
+                sample_width=2,  # Largeur des échantillons en octets (généralement 2 pour 16 bits)
+                frame_rate=16000,  # Fréquence d'échantillonnage, alignée avec celle du MediaRecorder
+                channels=1  # Audio mono
+            )
+
+            # Calculer la durée du chunk
+            chunk_duration = audio_segment.duration_seconds
+            print(f"Chunk duration: {chunk_duration} seconds")
+            
+            # Utiliser un fichier temporaire pour stocker le chunk audio pour la transcription
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+                print(f"Chunk saved to temporary file: {temp_file.name}")
+                
+                audio_segment.export(temp_file.name, format="wav")
+
+                # Envoyer le fichier temporaire au modèle Whisper pour transcription
+                transcription_live = Transcriber_Whisper_live(
+                    temp_file.name,
+                    return_timestamps="word"
+                )
+
+                # print(f"Transcription: {transcription_live}")
+                yield f"{transcription_live}\n"  # Envoi du segment de transcription en JSON
+
+
+            # Supprimer le fichier temporaire après utilisation
+            temp_file.close()
+
+
+    except WebSocketDisconnect:
+        print("Client disconnected")
+
 def convert_tracks_to_json(tracks):
     # Liste pour stocker les segments formatés
     formatted_segments = []
@@ -498,14 +567,6 @@ def convert_tracks_to_json(tracks):
     # return json.dumps(formatted_segments)
     return formatted_segments
 
-
-
-import filetype
-import logging
-from pydub import AudioSegment
-from moviepy.editor import VideoFileClip
-import os
-import tempfile
 
 def extract_audio(file_path):
     """
@@ -563,3 +624,10 @@ def extract_audio(file_path):
         logging.error(f"Erreur lors de l'extraction audio : {e}")
         return None
 
+def process_audio_chunk(data):
+    # Créer un AudioSegment à partir des données brutes
+    audio_chunk = AudioSegment.from_raw(io.BytesIO(data), sample_width=2, frame_rate=16000, channels=1)
+    # Ici, vous pouvez ajouter des fonctionnalités pour traiter ou analyser l'audio
+    print("Processed audio chunk of size:", len(data))
+
+    return audio_chunk

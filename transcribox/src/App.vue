@@ -3,7 +3,7 @@
     <div id="app" class="page-container">
       <!-- Vue principale affichée après l'upload du fichier -->
       <div v-if="file">
-        <!-- Section fichier avec le même style que Statistiques -->
+        <!-- Section fichier -->
         <div class="file-container">
           <div class="file-header">📁 Fichier
             <div class="settings-group">
@@ -16,8 +16,6 @@
               <button @click="removeFile">❌</button>
             </div>
           </div>
-
-
         </div>
 
         <!-- Section audio-player avec style similaire à stats-container -->
@@ -46,7 +44,7 @@
         </div>
 
         <!-- Section de la barre de progression ASCII pour la transcription globale -->
-        <div class="progress-bar-container">
+        <div class="progress-bar-container" v-if="!isTranscriptionComplete">
           <div class="progress-bar-header">📈 Progression de la Transcription</div>
           <div>
             <div class="loading-message">{{ loadingMessage }}</div>
@@ -64,25 +62,7 @@
           </div>
         </div>
 
-        <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
-        <div class="stats-container">
-          <div class="stats-header">📊 Statistiques</div>
-          <div class="stats-body">
-            <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
-            <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
 
-            <div class="stats-subheader">👥 Répartition temps de parole</div>
-            <ul>
-              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index" class="speaker-stat">
-                <span class="speaker-label">{{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du
-                  temps total</span>
-                <div class="bar-container">
-                  <div class="bar" :style="{ width: speakerStat.percentage.toFixed(2) + '%' }"></div>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </div>
 
         <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
         <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
@@ -131,6 +111,26 @@
             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
         </div>
 
+        <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
+        <div class="stats-container" v-if="diarization !== null">
+          <div class="stats-header">📊 Statistiques</div>
+          <div class="stats-body">
+            <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
+            <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
+
+            <div class="stats-subheader">👥 Répartition temps de parole</div>
+            <ul>
+              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index" class="speaker-stat">
+                <span class="speaker-label">{{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du
+                  temps total</span>
+                <div class="bar-container">
+                  <div class="bar" :style="{ width: speakerStat.percentage.toFixed(2) + '%' }"></div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+       
       </div>
 
       <!-- Interface d'upload si aucun fichier n'est sélectionné -->
@@ -162,9 +162,6 @@
             {{ isRecording ? 'Stop' : 'Enregistrer la conversation directement' }}
           </span>
         </div>
-
-        
-
         </div>
 
         <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a"
@@ -197,16 +194,15 @@
 
         <!-- Paramètre -->
         <div class="stats-container">
-          <div class="stats-header"><button @click="openSettings" class="settings-button">⚙️</button>Paramètres</div>
+          <div class="stats-header">⚙️ Paramètres</div>
           <div class="settings-group">
             </div>
           <!-- Fenêtre modale pour les paramètres de transcription -->
-          <div v-if="showSettingsModal" class="settings-modal">
+          <div class="settings-modal">
               <div>
                 <div>
-    <TaskToggle v-model="settings.task" @save="saveSettings"
-    />
-  </div>
+                  <TaskToggle v-model="settings.task" />
+                </div>
               </div>
               <div>
                 <!-- <label>Model:</label>
@@ -216,8 +212,8 @@
               </div>
               <div>
               </div>
-              <button @click="saveSettings">Save</button>
-              <button @click="closeSettings">Close</button>
+              <!-- <button @click="saveSettings">Save</button>
+              <button @click="closeSettings">Close</button> -->
             </div>
         </div>
       </div>
@@ -235,6 +231,15 @@ export default {
     TaskToggle
   },
 
+  watch: {
+    'settings.task': {
+      handler(newVal, oldVal) {
+        // Appeler saveSettings chaque fois que settings.task change
+        this.saveSettings();
+      },
+      deep: true // Cette option n'est pas nécessaire ici car il s'agit d'une chaîne de caractères
+    }
+  },
   data() {
     return {
 
@@ -246,8 +251,10 @@ export default {
       stream: null,
 
       showSettingsModal: false,
+      showStatisticsModal: false,
+
       settings: {
-        task: "trancribe", // valeur par défaut
+        task: "transcribe", // valeur par défaut
         model: "openai/whisper-large-v3-turbo",
         lang: "auto",
       },
@@ -261,7 +268,6 @@ export default {
         "openai/whisper-base",
         "openai/whisper-large",
       ],
-
 
       thumbnail: null, // URL de l'image thumbnail
       extraction_audio_status: "🔄 Extraction audio en cours...",
@@ -285,6 +291,7 @@ export default {
       isPlaying: false,  // Indique si l'audio est en cours de lecture
       currentTime: 0,  // Temps actuel de la lecture
       audioDuration: 0,  // Durée totale de l'audio
+
       transcriptions: [],  // Ce tableau sera rempli par des transcriptions réelles du backend
       speechStats: {
         totalSpeakers: 0, // Nombre de locuteurs par défaut
@@ -325,12 +332,27 @@ export default {
             }
           });
 
-          this.mediaRecorder = new MediaRecorder(this.stream);
+        // Initier WebSocket
+        // this.socket = new WebSocket("wss://localhost:8000/streaming_audio");
+        this.socket = new WebSocket(`${process.env.VUE_APP_WEBSOCKET_URL}/streaming_audio`);
+        this.mediaRecorder = new MediaRecorder(this.stream);
           
-          this.mediaRecorder.ondataavailable = (event) => {
-            this.audioChunks.push(event.data);
+        this.socket.onopen = () => {
+            console.log("WebSocket connection opened");
           };
-          
+
+          this.socket.onerror = (error) => {
+            console.error("WebSocket error:", error);
+          };
+
+        this.mediaRecorder.ondataavailable = (event) => {
+            this.audioChunks.push(event.data);
+            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(event.data); // Envoyer le chunk de données au serveur
+            
+          }
+        };
+
           this.mediaRecorder.onstop = async () => {
             // Utiliser le temps d'enregistrement comme durée
             this.audioDuration = this.recordingTime;
@@ -349,14 +371,21 @@ export default {
 
             this.handleRecordedAudio(audioFile);
           };
-          
+
+          // Vérifiez si la connexion WebSocket est encore ouverte
+          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.close(); // Fermer la connexion WebSocket après le traitement
+          }
+
           // Réinitialiser les variables
           this.audioChunks = [];
           this.recordingTime = 0;
           this.startTime = Date.now();
           
           // Démarrer l'enregistrement
-          this.mediaRecorder.start();
+          // this.mediaRecorder.start();
+          this.mediaRecorder.start(5000); // Lancer l'enregistrement, envoyant des chunks toutes les 2s
+
           this.isRecording = true;
           this.startTimer();
           
@@ -548,21 +577,30 @@ export default {
       this.showSettingsModal = true;
     },
     closeSettings() {
-      this.showSettingsModal = false; // Fermer la fenêtre modale
+      this.showSettingsModal = false; // Fermer la fenêtre modale de statistiques
     },
+
+    // Ouvrir les statistiques
+    openStatistics() {
+      this.showStatisticsModal = true;
+    },
+    closeStatistics() {
+      this.showStatisticsModal = false; // Fermer la fenêtre modale de statistiques
+    },
+
 
     async saveSettings() {
       try {
-      console.log('Settings being sent:', this.settings);
-      const response = await axios.post('/settings/', this.settings);
-      console.log('Response:', response.data);
-    } catch (error) {
-      console.log('Full error:', error);
-      console.log('Request config:', error.config);
-      console.log('Request URL:', error.config.url);
-      console.error('Error saving settings:', error);
-    }
-      this.closeSettings();
+        console.log('Settings being sent:', this.settings);
+        const response = await axios.post('/settings/', this.settings);
+        console.log('Response:', response.data);
+      } catch (error) {
+        console.log('Full error:', error);
+        console.log('Request config:', error.config);
+        console.log('Request URL:', error.config.url);
+        console.error('Error saving settings:', error);
+      }
+      // this.closeSettings();
     },
 
     // Formater le temps en minutes et secondes
