@@ -233,7 +233,8 @@ export default {
 
   watch: {
     'settings.task': {
-      handler(newVal, oldVal) {
+      // handler(newVal, oldVal) {
+        handler() {
         // Appeler saveSettings chaque fois que settings.task change
         this.saveSettings();
       },
@@ -334,27 +335,55 @@ export default {
 
         // Initier WebSocket
         // this.socket = new WebSocket("wss://localhost:8000/streaming_audio");
-        this.socket = new WebSocket(`${process.env.VUE_APP_WEBSOCKET_URL}/streaming_audio`);
-        this.mediaRecorder = new MediaRecorder(this.stream);
-          
+        // this.socket = new WebSocket(`${process.env.VUE_APP_WEBSOCKET_URL}/streaming_audio`);
+        console.log("WebSocket URL:", process.env.VUE_APP_WEBSOCKET_URL);
+        this.socket = new WebSocket(process.env.VUE_APP_WEBSOCKET_URL);
+
         this.socket.onopen = () => {
-            console.log("WebSocket connection opened");
-          };
+          console.log("WebSocket connection opened");
+        };
 
-          this.socket.onerror = (error) => {
-            console.error("WebSocket error:", error);
-          };
+        this.socket.onmessage = (event) => {
+          try {
+            // Parse the incoming JSON message
+            const message = JSON.parse(event.data);
 
+            if (message.chunk_duration !== undefined) {
+              console.log("Chunk duration received:", message.chunk_duration, "seconds");
+              // You can now use chunk_duration as needed in your Vue.js app
+              // For example, update a component data property
+              this.chunkDuration = message.chunk_duration;
+            }
+
+            if (message.transcription_live !== undefined) {
+              console.log("Transcription received:", message.transcription_live);
+              this.transcriptionLive = message.transcription_live;
+            }
+
+          } catch (error) {
+            console.error("Erreur, je n'ai pas réussi à parser le message:", error);
+          }
+        };
+
+        this.socket.onerror = (error) => {
+          console.error("WebSocket error:", error);
+        };
+
+        // Initialiser MediaRecorder avec le flux audio
+        this.mediaRecorder = new MediaRecorder(this.stream);
+
+        // Configuration de l'événement ondataavailable pour envoyer les chunks en temps réel
         this.mediaRecorder.ondataavailable = (event) => {
             this.audioChunks.push(event.data);
             if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(event.data); // Envoyer le chunk de données au serveur
-            
           }
         };
 
-          this.mediaRecorder.onstop = async () => {
+        // Gestion de l'arrêt de l'enregistrement
+        this.mediaRecorder.onstop = async () => {
             // Utiliser le temps d'enregistrement comme durée
+            // this.audioDuration = Date.now() - this.startTime; // Durée totale de l'enregistrement
             this.audioDuration = this.recordingTime;
             
             const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
@@ -372,7 +401,7 @@ export default {
             this.handleRecordedAudio(audioFile);
           };
 
-          // Vérifiez si la connexion WebSocket est encore ouverte
+          // Fermer la connexion WebSocket
           if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.close(); // Fermer la connexion WebSocket après le traitement
           }
@@ -380,14 +409,14 @@ export default {
           // Réinitialiser les variables
           this.audioChunks = [];
           this.recordingTime = 0;
-          this.startTime = Date.now();
           
-          // Démarrer l'enregistrement
-          // this.mediaRecorder.start();
+          // Démarrer l'enregistrement, en envoyant des chunks toutes les 5 secondes
           this.mediaRecorder.start(5000); // Lancer l'enregistrement, envoyant des chunks toutes les 2s
+          console.log("Type MIME de MediaRecorder:", this.mediaRecorder.mimeType);
 
           this.isRecording = true;
-          this.startTimer();
+          this.startTime = Date.now();
+          this.startTimer();  // Démarre un timer (si besoin, pour afficher la durée)
           
         } catch (err) {
           console.error('Erreur lors de l\'accès au microphone:', err);

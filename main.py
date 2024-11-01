@@ -1,6 +1,7 @@
 import asyncio
 from rich.progress import Progress
 import threading
+import ffmpeg
 
 import filetype
 
@@ -505,51 +506,54 @@ async def process_audio(file: UploadFile = File(...)):
             logging.debug(f"Fichier temporaire {audio_path} supprimé.")
 
 
-@app.websocket("/streaming_audio")
+@app.websocket("/streaming_audio/")
 async def websocket_audio_receiver(websocket: WebSocket):
     await websocket.accept()
-    print("----------------------------------------------> Client connected, awaiting your data")
-
-    chunk_size = 1024 * 64  # Taille des chunks en bytes, ajustez selon vos besoins
+    print("Client connecté, en attente des données")
 
     try:
         while True:
-            print("----------------------------------------------> Données reçues")
-
+            print("Données reçues")
             data = await websocket.receive_bytes()
-            # Traiter les données audio ici, comme les enregistrer ou les traiter pour une reconnaissance vocale
 
-            # Convertir le chunk reçu en AudioSegment pour analyser sa durée
-            audio_segment = AudioSegment.from_raw(
-                io.BytesIO(data),
-                sample_width=2,  # Largeur des échantillons en octets (généralement 2 pour 16 bits)
-                frame_rate=16000,  # Fréquence d'échantillonnage, alignée avec celle du MediaRecorder
-                channels=1  # Audio mono
-            )
+            # Sauvegarder les données reçues dans un fichier temporaire
+            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as temp_input_file:
+                temp_input_file.write(data)
+                temp_input_file.flush()
 
-            # Calculer la durée du chunk
-            chunk_duration = audio_segment.duration_seconds
-            print(f"Chunk duration: {chunk_duration} seconds")
+                # Convertir le fichier audio compressé en PCM brut (WAV)
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_output_file:
+                    (
+                        ffmpeg
+                        .input(temp_input_file.name)
+                        .output(temp_output_file.name, format='wav', acodec='pcm_s16le', ac=1, ar='16000')
+                        .overwrite_output()
+                        .run(quiet=True)
+                    )
+
+                    # Charger l'audio décodé avec AudioSegment
+                    audio_segment = AudioSegment.from_wav(temp_output_file.name)
+
+                    # Calculer la durée du chunk
+                    chunk_duration = audio_segment.duration_seconds
+                    print(f"Chunk duration: {chunk_duration} seconds")
+
+                    # Transcrire l'audio (si vous avez une fonction pour cela)
+                    transcription_live = Transcriber_Whisper_live(
+                        temp_output_file.name,
+                        return_timestamps="word"
+                    )
+
+                    print(f"Transcription: {transcription_live}")
+
+                    # Envoyer les données au frontend
+                    await websocket.send_json({
+                        'chunk_duration': chunk_duration,
+                        'transcription_live': transcription_live
+                    })
             
-            # Utiliser un fichier temporaire pour stocker le chunk audio pour la transcription
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-                print(f"Chunk saved to temporary file: {temp_file.name}")
-                
-                audio_segment.export(temp_file.name, format="wav")
-
-                # Envoyer le fichier temporaire au modèle Whisper pour transcription
-                transcription_live = Transcriber_Whisper_live(
-                    temp_file.name,
-                    return_timestamps="word"
-                )
-
-                # print(f"Transcription: {transcription_live}")
-                yield f"{transcription_live}\n"  # Envoi du segment de transcription en JSON
-
-
             # Supprimer le fichier temporaire après utilisation
-            temp_file.close()
-
+            # temp_file.close()
 
     except WebSocketDisconnect:
         print("Client disconnected")
