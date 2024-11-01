@@ -170,6 +170,8 @@
       <!-- Affichage du temps d'enregistrement -->
       <div v-if="isRecording" class="recording-timer">
         Enregistrement en cours: {{ formatTime(recordingTime) }}
+        <div>{{ transcriptionLive.text }}</div>
+  
       </div>
 
         <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
@@ -243,6 +245,11 @@ export default {
   },
   data() {
     return {
+
+      transcriptionLive: { "text": "", "chunks": [ { "text": "", "timestamp": [ 0, 0.1 ] }] },
+
+      audioBuffer: [],      // Tableau pour accumuler les données audio
+      bufferDuration: 0,    // Durée accumulée en secondes
 
       isRecording: false, // État de l'enregistrement
       mediaRecorder: null, // Instance du MediaRecorder
@@ -322,10 +329,123 @@ export default {
   },
 
   methods: {
+    // async toggleRecording() {
+    //   if (!this.isRecording) {
+    //     try {
+    //       this.stream = await navigator.mediaDevices.getUserMedia({ 
+    //         audio: {
+    //           echoCancellation: true,
+    //           noiseSuppression: true,
+    //           autoGainControl: true
+    //         }
+    //       });
+
+    //     // Initier WebSocket
+    //     // this.socket = new WebSocket("wss://localhost:8000/streaming_audio");
+    //     // this.socket = new WebSocket(`${process.env.VUE_APP_WEBSOCKET_URL}/streaming_audio`);
+    //     console.log("WebSocket URL:", process.env.VUE_APP_WEBSOCKET_URL);
+    //     this.socket = new WebSocket(process.env.VUE_APP_WEBSOCKET_URL);
+
+    //     this.socket.onopen = () => {
+    //       console.log("WebSocket connection opened");
+    //     };
+
+    //     this.socket.onmessage = (event) => {
+    //       try {
+    //         // Parse the incoming JSON message
+    //         const message = JSON.parse(event.data);
+
+    //         if (message.chunk_duration !== undefined) {
+    //           console.log("Chunk duration received:", message.chunk_duration, "seconds");
+    //           // You can now use chunk_duration as needed in your Vue.js app
+    //           // For example, update a component data property
+    //           this.chunkDuration = message.chunk_duration;
+    //         }
+
+    //         if (message.transcription_live !== undefined) {
+    //           console.log("Transcription received:", message.transcription_live);
+    //           this.transcriptionLive = message.transcription_live;
+    //         }
+
+    //       } catch (error) {
+    //         console.error("Erreur, je n'ai pas réussi à parser le message:", error);
+    //       }
+    //     };
+
+    //     this.socket.onerror = (error) => {
+    //       console.error("WebSocket error:", error);
+    //     };
+
+    //     // Initialiser MediaRecorder avec le flux audio
+    //     this.mediaRecorder = new MediaRecorder(this.stream);
+
+    //     // Configuration de l'événement ondataavailable pour envoyer les chunks en temps réel
+    //     this.mediaRecorder.ondataavailable = (event) => {
+    //         this.audioChunks.push(event.data);
+    //         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+    //         this.socket.send(event.data); // Envoyer le chunk de données au serveur
+    //       }
+    //     };
+
+    //     // Gestion de l'arrêt de l'enregistrement
+    //     this.mediaRecorder.onstop = async () => {
+    //         // Utiliser le temps d'enregistrement comme durée
+    //         // this.audioDuration = Date.now() - this.startTime; // Durée totale de l'enregistrement
+    //         this.audioDuration = this.recordingTime;
+            
+    //         const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+    //         const audioFile = new File([audioBlob], 'recording.wav', { 
+    //           type: 'audio/wav',
+    //           lastModified: Date.now()
+    //         });
+            
+    //         // Ajouter la durée aux métadonnées du fichier
+    //         Object.defineProperty(audioFile, 'duration', {
+    //           value: this.recordingTime,
+    //           writable: false
+    //         });
+
+    //         this.handleRecordedAudio(audioFile);
+    //       };
+
+    //       // Fermer la connexion WebSocket
+    //       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+    //         this.socket.close(); // Fermer la connexion WebSocket après le traitement
+    //       }
+
+    //       // Réinitialiser les variables
+    //       this.audioChunks = [];
+    //       this.recordingTime = 0;
+          
+    //       // Démarrer l'enregistrement, en envoyant des chunks toutes les 5 secondes
+    //       this.mediaRecorder.start(5000); // Lancer l'enregistrement, envoyant des chunks toutes les 2s
+    //       console.log("Type MIME de MediaRecorder:", this.mediaRecorder.mimeType);
+
+    //       this.isRecording = true;
+    //       this.startTime = Date.now();
+    //       this.startTimer();  // Démarre un timer (si besoin, pour afficher la durée)
+          
+    //     } catch (err) {
+    //       console.error('Erreur lors de l\'accès au microphone:', err);
+    //       alert('Impossible d\'accéder au microphone. Veuillez vérifier les permissions.');
+    //     }
+    //   } else {
+    //     // Arrêt de l'enregistrement
+    //     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+    //       this.mediaRecorder.stop();
+    //     }
+    //     if (this.stream) {
+    //       this.stream.getTracks().forEach(track => track.stop());
+    //     }
+    //     this.isRecording = false;
+    //     this.stopTimer();
+    //   }
+    // },    
+
     async toggleRecording() {
       if (!this.isRecording) {
         try {
-          this.stream = await navigator.mediaDevices.getUserMedia({ 
+          this.stream = await navigator.mediaDevices.getUserMedia({
             audio: {
               echoCancellation: true,
               noiseSuppression: true,
@@ -333,107 +453,227 @@ export default {
             }
           });
 
-        // Initier WebSocket
-        // this.socket = new WebSocket("wss://localhost:8000/streaming_audio");
-        // this.socket = new WebSocket(`${process.env.VUE_APP_WEBSOCKET_URL}/streaming_audio`);
-        console.log("WebSocket URL:", process.env.VUE_APP_WEBSOCKET_URL);
-        this.socket = new WebSocket(process.env.VUE_APP_WEBSOCKET_URL);
+          // Initialiser le WebSocket
+          console.log("WebSocket URL:", process.env.VUE_APP_WEBSOCKET_URL);
+          this.socket = new WebSocket(process.env.VUE_APP_WEBSOCKET_URL);
 
-        this.socket.onopen = () => {
-          console.log("WebSocket connection opened");
-        };
-
-        this.socket.onmessage = (event) => {
-          try {
-            // Parse the incoming JSON message
-            const message = JSON.parse(event.data);
-
-            if (message.chunk_duration !== undefined) {
-              console.log("Chunk duration received:", message.chunk_duration, "seconds");
-              // You can now use chunk_duration as needed in your Vue.js app
-              // For example, update a component data property
-              this.chunkDuration = message.chunk_duration;
-            }
-
-            if (message.transcription_live !== undefined) {
-              console.log("Transcription received:", message.transcription_live);
-              this.transcriptionLive = message.transcription_live;
-            }
-
-          } catch (error) {
-            console.error("Erreur, je n'ai pas réussi à parser le message:", error);
-          }
-        };
-
-        this.socket.onerror = (error) => {
-          console.error("WebSocket error:", error);
-        };
-
-        // Initialiser MediaRecorder avec le flux audio
-        this.mediaRecorder = new MediaRecorder(this.stream);
-
-        // Configuration de l'événement ondataavailable pour envoyer les chunks en temps réel
-        this.mediaRecorder.ondataavailable = (event) => {
-            this.audioChunks.push(event.data);
-            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(event.data); // Envoyer le chunk de données au serveur
-          }
-        };
-
-        // Gestion de l'arrêt de l'enregistrement
-        this.mediaRecorder.onstop = async () => {
-            // Utiliser le temps d'enregistrement comme durée
-            // this.audioDuration = Date.now() - this.startTime; // Durée totale de l'enregistrement
-            this.audioDuration = this.recordingTime;
-            
-            const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
-            const audioFile = new File([audioBlob], 'recording.wav', { 
-              type: 'audio/wav',
-              lastModified: Date.now()
-            });
-            
-            // Ajouter la durée aux métadonnées du fichier
-            Object.defineProperty(audioFile, 'duration', {
-              value: this.recordingTime,
-              writable: false
-            });
-
-            this.handleRecordedAudio(audioFile);
+          this.socket.onopen = () => {
+            console.log("WebSocket connection opened");
           };
 
-          // Fermer la connexion WebSocket
-          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.close(); // Fermer la connexion WebSocket après le traitement
-          }
+          this.socket.onmessage = (event) => {
+            try {
+              const message = JSON.parse(event.data);
 
-          // Réinitialiser les variables
-          this.audioChunks = [];
-          this.recordingTime = 0;
-          
-          // Démarrer l'enregistrement, en envoyant des chunks toutes les 5 secondes
-          this.mediaRecorder.start(5000); // Lancer l'enregistrement, envoyant des chunks toutes les 2s
-          console.log("Type MIME de MediaRecorder:", this.mediaRecorder.mimeType);
+              if (message.chunk_duration !== undefined) {
+                console.log("Chunk duration received:", message.chunk_duration, "seconds");
+                this.chunkDuration = message.chunk_duration;
+              }
 
+              if (message.transcription_live !== undefined) {
+                console.log("Transcription received:", message.transcription_live);
+                this.transcriptionLive = message.transcription_live;
+
+              }
+
+            } catch (error) {
+              console.error("Erreur, je n'ai pas réussi à parser le message:", error);
+            }
+          };
+
+          this.socket.onerror = (error) => {
+            console.error("WebSocket error:", error);
+          };
+
+          // Utiliser l'API Web Audio
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.audioContext = new AudioContext({ sampleRate: 16000 });
+          const bufferSize = 4096;
+
+          this.scriptNode = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
+          this.input = this.audioContext.createMediaStreamSource(this.stream);
+
+          this.input.connect(this.scriptNode);
+          this.scriptNode.connect(this.audioContext.destination);
+
+          this.audioBuffer = [];
+          this.bufferDuration = 0;
+          this.fullAudioBuffer = []; // Pour accumuler l'audio complet
+
+          this.scriptNode.onaudioprocess = (audioProcessingEvent) => {
+            const inputBuffer = audioProcessingEvent.inputBuffer;
+            const inputData = inputBuffer.getChannelData(0);
+
+            // Convertir en Int16Array
+            const int16Data = this.convertFloat32ToInt16(inputData);
+
+            // Accumuler les données pour les chunks de 2 secondes
+            this.audioBuffer.push(int16Data);
+            this.bufferDuration += inputBuffer.duration;
+
+            // Accumuler l'intégralité de l'audio
+            this.fullAudioBuffer.push(int16Data);
+
+            // Vérifier si nous avons accumulé au moins 3 secondes d'audio
+            if (this.bufferDuration >= 2) {
+              const mergedBuffer = this.mergeBuffers(this.audioBuffer);
+
+              // Envoyer les données au backend
+              if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                this.socket.send(mergedBuffer.buffer);
+              }
+
+              // Réinitialiser le buffer et la durée pour les chunks
+              this.audioBuffer = [];
+              this.bufferDuration = 0;
+            }
+          };
+
+          // Démarrer l'enregistrement
           this.isRecording = true;
           this.startTime = Date.now();
-          this.startTimer();  // Démarre un timer (si besoin, pour afficher la durée)
-          
+          this.startTimer();
+
         } catch (err) {
           console.error('Erreur lors de l\'accès au microphone:', err);
           alert('Impossible d\'accéder au microphone. Veuillez vérifier les permissions.');
         }
       } else {
         // Arrêt de l'enregistrement
-        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-          this.mediaRecorder.stop();
+        if (this.scriptNode) {
+          // Avant de déconnecter, envoyer les données restantes s'il y en a
+          if (this.audioBuffer.length > 0) {
+            const mergedChunkBuffer = this.mergeBuffers(this.audioBuffer);
+            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+              this.socket.send(mergedChunkBuffer.buffer);
+            }
+            this.audioBuffer = [];
+            this.bufferDuration = 0;
+          }
+
+          this.scriptNode.disconnect();
+          this.scriptNode = null;
+        }
+        if (this.input) {
+          this.input.disconnect();
+          this.input = null;
+        }
+        if (this.audioContext && this.audioContext.state !== 'closed') {
+          await this.audioContext.close();
         }
         if (this.stream) {
           this.stream.getTracks().forEach(track => track.stop());
         }
+
+        // Traiter l'audio complet
+        if (this.fullAudioBuffer.length > 0) {
+          // Fusionner l'audio complet
+          const fullMergedBuffer = this.mergeBuffers(this.fullAudioBuffer);
+
+
+          // Créer un fichier WAV valide
+          const audioBlob = this.createWAVFile(fullMergedBuffer, 16000);
+          // Créer un Blob à partir du buffer fusionné
+          // const audioBlob = new Blob([fullMergedBuffer.buffer], { type: 'audio/wav' });
+
+          // Si vous avez besoin de créer un objet File
+          const audioFile = new File([audioBlob], 'recording.wav', {
+            type: 'audio/wav',
+            lastModified: Date.now()
+          });
+
+          // Ajouter la durée aux métadonnées du fichier
+          Object.defineProperty(audioFile, 'duration', {
+            value: this.recordingTime,
+            writable: false
+          });
+
+          // Appeler la fonction pour traiter l'audio
+          this.handleRecordedAudio(audioFile);
+
+          // Réinitialiser le buffer complet
+          this.fullAudioBuffer = [];
+        }
+
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+          this.socket.close();
+        }
         this.isRecording = false;
         this.stopTimer();
       }
-    },    
+    },
+
+    convertFloat32ToInt16(buffer) {
+      const l = buffer.length;
+      const buf = new Int16Array(l);
+      for (let i = 0; i < l; i++) {
+        let s = Math.max(-1, Math.min(1, buffer[i]));
+        buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      return buf;
+    },
+
+    mergeBuffers(bufferArray) {
+      let totalLength = 0;
+      bufferArray.forEach(buf => {
+        totalLength += buf.length;
+      });
+
+      const result = new Int16Array(totalLength);
+      let offset = 0;
+      bufferArray.forEach(buf => {
+        result.set(buf, offset);
+        offset += buf.length;
+      });
+
+      return result;
+    },
+
+    createWAVFile(int16Data, sampleRate) {
+      const buffer = new ArrayBuffer(44 + int16Data.length * 2);
+      const view = new DataView(buffer);
+
+      /* RIFF identifier */
+      this.writeString(view, 0, 'RIFF');
+      /* file length */
+      view.setUint32(4, 36 + int16Data.length * 2, true);
+      /* RIFF type */
+      this.writeString(view, 8, 'WAVE');
+      /* format chunk identifier */
+      this.writeString(view, 12, 'fmt ');
+      /* format chunk length */
+      view.setUint32(16, 16, true);
+      /* sample format (raw) */
+      view.setUint16(20, 1, true);
+      /* channel count */
+      view.setUint16(22, 1, true);
+      /* sample rate */
+      view.setUint32(24, sampleRate, true);
+      /* byte rate (sample rate * block align) */
+      view.setUint32(28, sampleRate * 2, true);
+      /* block align (channel count * bytes per sample) */
+      view.setUint16(32, 2, true);
+      /* bits per sample */
+      view.setUint16(34, 16, true);
+      /* data chunk identifier */
+      this.writeString(view, 36, 'data');
+      /* data chunk length */
+      view.setUint32(40, int16Data.length * 2, true);
+
+      // Write the PCM samples
+      for (let i = 0; i < int16Data.length; i++) {
+        view.setInt16(44 + i * 2, int16Data[i], true);
+      }
+
+      return new Blob([view], { type: 'audio/wav' });
+    },
+
+    writeString(view, offset, string) {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    },
+
 
     startTimer() {
       this.timerInterval = setInterval(() => {

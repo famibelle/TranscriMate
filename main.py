@@ -1,7 +1,8 @@
 import asyncio
 from rich.progress import Progress
-import threading
-import ffmpeg
+from silero_vad import get_speech_timestamps
+
+import numpy as np
 
 import filetype
 
@@ -130,7 +131,7 @@ Transcriber_Whisper = pipeline(
 
 Transcriber_Whisper_live = pipeline(
         "automatic-speech-recognition",
-        model = "openai/whisper-tiny",
+        model = "openai/whisper-small",
         chunk_length_s=30,
         # stride_length_s=(4, 2),
         device=device    
@@ -506,6 +507,12 @@ async def process_audio(file: UploadFile = File(...)):
             logging.debug(f"Fichier temporaire {audio_path} supprimé.")
 
 
+# Charger le modèle Silero VAD
+model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=True)
+get_speech_timestamps = utils['get_speech_timestamps'] if isinstance(utils, dict) else utils[0]
+
+from faster_whisper import WhisperModel
+
 @app.websocket("/streaming_audio/")
 async def websocket_audio_receiver(websocket: WebSocket):
     await websocket.accept()
@@ -513,50 +520,63 @@ async def websocket_audio_receiver(websocket: WebSocket):
 
     try:
         while True:
-            print("Données reçues")
             data = await websocket.receive_bytes()
 
-            # Sauvegarder les données reçues dans un fichier temporaire
-            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as temp_input_file:
-                temp_input_file.write(data)
-                temp_input_file.flush()
+            # Convertir les données reçues en AudioSegment
+            audio_segment = AudioSegment(
+                data=data,
+                sample_width=2,  # 16 bits
+                frame_rate=16000,
+                channels=1
+            )
 
-                # Convertir le fichier audio compressé en PCM brut (WAV)
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_output_file:
-                    (
-                        ffmpeg
-                        .input(temp_input_file.name)
-                        .output(temp_output_file.name, format='wav', acodec='pcm_s16le', ac=1, ar='16000')
-                        .overwrite_output()
-                        .run(quiet=True)
-                    )
+            # Convertir AudioSegment en NumPy pour Silero VAD
+            samples = np.array(audio_segment.get_array_of_samples())
+            audio_data = torch.from_numpy(samples).float() / 32768.0  # Normalisation en float32
 
-                    # Charger l'audio décodé avec AudioSegment
-                    audio_segment = AudioSegment.from_wav(temp_output_file.name)
+            # Utiliser Silero VAD pour détecter la voix
+            speech_timestamps = get_speech_timestamps(audio_data, model, sampling_rate=16000)
 
-                    # Calculer la durée du chunk
-                    chunk_duration = audio_segment.duration_seconds
-                    print(f"Chunk duration: {chunk_duration} seconds")
+            if speech_timestamps:
+                print("Voix détectée, lancement de la transcription")
+                # Calculer la durée du chunk
+                chunk_duration = audio_segment.duration_seconds
+                print(f"Chunk duration: {chunk_duration} seconds")
 
-                    # Transcrire l'audio (si vous avez une fonction pour cela)
+                # Sauvegarder le chunk dans un fichier temporaire
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+                    audio_segment.export(temp_file.name, format="wav")
+                    
+                    # Transcrire l'audio
                     transcription_live = Transcriber_Whisper_live(
-                        temp_output_file.name,
+                        temp_file.name,
                         return_timestamps="word"
                     )
 
                     print(f"Transcription: {transcription_live}")
 
-                    # Envoyer les données au frontend
-                    await websocket.send_json({
-                        'chunk_duration': chunk_duration,
-                        'transcription_live': transcription_live
-                    })
-            
-            # Supprimer le fichier temporaire après utilisation
-            # temp_file.close()
+                # Envoyer les données au frontend
+                await websocket.send_json({
+                    'chunk_duration': chunk_duration,
+                    'transcription_live': transcription_live
+                })
 
+                # Supprimer le fichier temporaire
+                os.unlink(temp_file.name)
+    
+            else:
+                print("Aucune voix détectée, passage au chunk suivant")
+                websocket.send_json({
+                    'chunk_duration': 0,
+                    'transcription_live': "..."
+                })
     except WebSocketDisconnect:
-        print("Client disconnected")
+        print("Client déconnecté")
+
+
+
+
+
 
 def convert_tracks_to_json(tracks):
     # Liste pour stocker les segments formatés
