@@ -368,17 +368,36 @@ async def upload_file(file: UploadFile = File(...)):
 
                 logging.debug(f"----> Transcription démarée avec le model <{model_settings}> et la task <{task}> <----")
 
+                # generate_kwargs = {
+                #     "max_new_tokens": 448,
+                #     "num_beams": 1,
+                #     "condition_on_prev_tokens": False, # Si activé, Whisper prend en compte les tokens précédemment générés pour conditionner la génération des tokens actuels.
+                #     "compression_ratio_threshold": 1.35,  # zlib compression ratio threshold (in token space)
+                #     "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+                #     "logprob_threshold": -1.0,
+                #     "no_speech_threshold": 0.6,
+                #     "return_timestamps": True,
+                # }
+
                 if current_settings['task'] != "transcribe":
                     transcription = Transcriber_Whisper(
                         segment_path,
                         return_timestamps = True,
                         # generate_kwargs={"language": "french"} 
-                        generate_kwargs={"language": "english"} 
-                        )
+                        generate_kwargs={
+                            "language": "english", 
+                            "condition_on_prev_tokens": True,
+                            # "no_speech_threshold": 0.8  # Augmente pour ignorer plus de bruit ou de silence
+                        } 
+                    )
                 else:
                     transcription = Transcriber_Whisper(
                         segment_path,
-                        return_timestamps = True
+                        return_timestamps = True,
+                        generate_kwargs={
+                            "condition_on_prev_tokens": True,
+                            # "no_speech_threshold": 0.8  # Augmente pour ignorer plus de bruit ou de silence
+                        } 
                     )
                 # Transcrire ce segment avec Whisper
                 # Supprimer le fichier de segment une fois transcrit
@@ -511,8 +530,6 @@ async def process_audio(file: UploadFile = File(...)):
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=True)
 get_speech_timestamps = utils['get_speech_timestamps'] if isinstance(utils, dict) else utils[0]
 
-from faster_whisper import WhisperModel
-
 @app.websocket("/streaming_audio/")
 async def websocket_audio_receiver(websocket: WebSocket):
     await websocket.accept()
@@ -547,10 +564,16 @@ async def websocket_audio_receiver(websocket: WebSocket):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
                     audio_segment.export(temp_file.name, format="wav")
                     
+                if current_settings['task'] != "transcribe":
+                    generate_kwargs={"language": "english", "condition_on_prev_tokens": True} 
+                else:
+                    generate_kwargs={"condition_on_prev_tokens": True} 
+    
                     # Transcrire l'audio
                     transcription_live = Transcriber_Whisper_live(
                         temp_file.name,
-                        return_timestamps="word"
+                        return_timestamps="word",
+                        generate_kwargs = generate_kwargs
                     )
 
                     print(f"Transcription: {transcription_live}")
@@ -572,9 +595,6 @@ async def websocket_audio_receiver(websocket: WebSocket):
                 })
     except WebSocketDisconnect:
         print("Client déconnecté")
-
-
-
 
 
 

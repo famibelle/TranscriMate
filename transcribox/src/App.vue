@@ -45,7 +45,8 @@
 
         <!-- Section de la barre de progression ASCII pour la transcription globale -->
         <div class="progress-bar-container" v-if="!isTranscriptionComplete">
-          <div class="progress-bar-header">📈 Progression de la Transcription</div>
+          <div class="progress-bar-header">📈 Progression de la {{ settings.task === "transcribe" ? "Transcription" : "Traduction" }}
+          </div>
           <div>
             <div class="loading-message">{{ loadingMessage }}</div>
             <pre>{{ progressBarExtractionAudio }}</pre>
@@ -143,9 +144,9 @@
           </div>
         </div>
         <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
-          <p>Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
-          <button @click.stop="triggerFileInput">📁 Sélectionnez un fichier</button>
-          <p>ou</p>
+          <p v-if="!isRecording">Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
+          <button v-if="!isRecording" @click.stop="triggerFileInput">📁 Sélectionnez un fichier</button>
+          <p v-if="!isRecording">ou</p>
         <!-- Bouton d'enregistrement rond -->
         <div class="record-button-wrapper">
           <button 
