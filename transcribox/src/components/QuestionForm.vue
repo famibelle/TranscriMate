@@ -2,16 +2,15 @@
   <div>
     <form @submit.prevent="askQuestion">
       <div v-if="response">
-      <b>Réponse :</b>
       <MarkdownRenderer :content="response" />
 
     </div>
 
-      <input
+    <input
         v-model="question"
-        type="text"
-        placeholder="Entrez votre question ici"
-        required
+        ref="questionInput"
+        placeholder="Posez une question"
+        style="width: 80%; height: 2em;"
       />
       <button type="submit">Envoyer</button>
     </form>
@@ -32,10 +31,19 @@ export default {
   },
   data() {
     return {
-      question: 'Fais une synthèse de la transcription',
+      question: 'Fais une synthèse structurée, de la transcription, mets en gras les points importants',
       response: '',
     };
   },
+
+  mounted() {
+    // Met le focus sur l'input et sélectionne le texte par défaut
+    this.$nextTick(() => {
+      this.$refs.questionInput.focus();
+      this.$refs.questionInput.select();
+    });
+  },
+
   methods: {
     async askQuestion() {
       this.response = ''; // Réinitialise la réponse pour chaque nouvelle question
