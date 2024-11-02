@@ -12,11 +12,13 @@
         ref="questionInput"
         placeholder="Posez une question"
         class="chatbot-textarea"
+        @keydown.enter.prevent="askQuestion"
       ></textarea>
       
-      <!-- Bouton rond avec une flèche vers le haut -->
-      <button type="submit" class="submit-button">
-        <span class="arrow">↑</span>
+      <!-- Bouton rond avec une flèche ou un carré en fonction de l'état de streaming -->
+      <button type="submit" class="submit-button" :disabled="isStreamingChatResponse">
+        <span v-if="!isStreamingChatResponse" class="arrow">🡹</span> <!-- Affiche une flèche si le streaming n'est pas en cours -->
+        <span v-else class="square">■</span> <!-- Affiche un carré pendant le streaming -->
       </button>
     </form>
   </div>
@@ -35,8 +37,9 @@ export default {
   },
   data() {
     return {
-      question: 'Fais une synthèse structurée, mets en gras les points importants et ne dépasse pas 500 mots',
+      question: 'Fais une synthèse structurée, et ne dépasse pas 500 mots',
       response: '',
+      isStreamingChatResponse: false // État pour suivre si le streaming de réponse du chat est en cours
     };
   },
 
@@ -50,6 +53,8 @@ export default {
 
   methods: {
     async askQuestion() {
+      // Réinitialise les états de streaming et de réponse au début de chaque requête
+      this.isStreamingChatResponse = true; // Active l'état de streaming
       this.response = ''; // Réinitialise la réponse pour chaque nouvelle question
 
       // Prépare les données de la requête
@@ -58,24 +63,42 @@ export default {
         transcription: this.fullTranscription,
       };
 
-      // Utilise fetch pour envoyer une requête POST et gérer la réponse en continu
-      const response = await fetch('/ask_question/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-      });
+      try {
+        // Utilise fetch pour envoyer une requête POST et gérer la réponse en continu
+        const response = await fetch('/ask_question/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData),
+        });
 
-      // Gère la lecture en streaming
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
+        // Gère la lecture en streaming
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
 
-      // Lit et décode les données en continu
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        this.response += decoder.decode(value, { stream: true }); // Affiche progressivement chaque segment
+        // Lit et décode les données en continu
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Décode chaque chunk de données
+          const chunk = decoder.decode(value, { stream: true });
+
+          // Vérifie si le chunk contient "event: start" ou "event: end"
+          if (chunk.includes("event: start") || chunk.includes("event: end")) {
+            continue; // Ignore les messages de début et de fin du streaming
+          }
+
+          // Ajoute uniquement le contenu des chunks à la réponse
+          this.response += chunk.replace("data: ", "").trim();
+
+        }
+      } catch (error) {
+        console.error("Erreur lors du streaming :", error);
+      } finally {
+        // Assure que l'état de streaming est désactivé à la fin, même en cas d'erreur
+        this.isStreamingChatResponse = false;
       }
     },
   },
@@ -87,66 +110,50 @@ form {
   margin-bottom: 20px;
 }
 input {
-  /* padding: 10px; */
   font-size: 16px;
   margin-right: 10px;
   padding: 0.5em;
-
 }
 
-/* Ajoute des styles supplémentaires si besoin */
-textarea {
-  font-size: 16px;
-  padding: 0.5em;
-  line-height: 1.5; /* Pour espacer légèrement les lignes */
-}
-
-button {
-  padding: 10px;
-  font-size: 16px;
-}
-h3 {
-  margin-top: 20px;
-}
-
-
-
-
-/* Styles pour le bouton rond avec une flèche pointant vers le haut */
+/* Styles pour le bouton rond avec une flèche ou un carré */
 .submit-button {
-  width: 40px;                  /* Taille du bouton */
-  height: 40px;                 /* Taille du bouton */
-  border-radius: 50%;           /* Forme ronde */
-  background-color: white;      /* Couleur de fond */
-  color: black;                 /* Couleur de la flèche */
-  font-size: 1.2em;             /* Taille de la flèche */
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: white;
+  color: black;
+  font-size: 1.2em;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   cursor: pointer;
-  margin-left: 10px;            /* Espace entre le bouton et le textarea */
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); /* Ombre pour effet de relief */
-  padding: 0;                   /* Retire le padding pour garder une forme parfaite */
-  box-sizing: border-box;       /* Pour assurer un alignement précis */
-  transition: transform 0.2s;   /* Transition pour l'effet au clic */
+  margin-left: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  padding: 0;
+  box-sizing: border-box;
+  transition: transform 0.2s;
 }
 
 .submit-button:active {
-  transform: scale(0.95);       /* Effet de pression au clic */
+  transform: scale(0.95);
 }
 
 .arrow {
-  font-weight: bold;            /* Flèche en gras pour la visibilité */
+  font-weight: bold;
+}
+
+.square {
+  font-weight: bold; /* Affiche le carré en gras pendant le streaming */
 }
 
 .submit-button:hover {
-  background-color: #0056b3; /* Couleur au survol */
+  background-color: #0056b3;
 }
 
 /* Styles pour le textarea type chatbot */
 .chatbot-textarea {
-  flex-grow: 1;              /* Prend tout l'espace disponible */
+  flex-grow: 1;
   height: 2.5em;
   border: none;
   border-radius: 20px;
@@ -157,7 +164,6 @@ h3 {
   resize: none;
   overflow-wrap: break-word;
   outline: none;
-  margin-right: 10px;       /* Espace entre le champ de texte et le bouton */
+  margin-right: 10px;
 }
-
 </style>
