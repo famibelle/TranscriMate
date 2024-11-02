@@ -722,7 +722,10 @@ class QuestionWithTranscription(BaseModel):
 
 # Fonction pour exécuter la commande en mode streaming
 def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
-    # Commande pour lancer le modèle
+    # Indique le début du streaming
+    yield "event: start\ndata: Le streaming a commencé\n\n"
+  
+      # Commande pour lancer le modèle
     command = ["ollama", "run", "jpacifico/chocolatine-3b", prompt]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
@@ -735,6 +738,10 @@ def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     process.stdout.close()
     process.wait()
 
+    # Indique la fin du streaming
+    yield "event: end\ndata: Le streaming est terminé\n\n"
+
+
 # Route POST pour le streaming
 @app.post("/ask_question/")
 async def ask_question(data: QuestionWithTranscription):
@@ -745,7 +752,7 @@ Voici la transcription:
 
 Voici la Question: {data.question}
 Réfléchis et apporte une réponse à la question. 
-Ta réponse sera au format markdown:
+Ta réponse sera au format markdown, les points importants seront en gras:
 """
     
     # Renvoie une réponse en streaming avec StreamingResponse
