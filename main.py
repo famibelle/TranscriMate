@@ -1,12 +1,15 @@
 import asyncio
 from rich.progress import Progress
 from silero_vad import get_speech_timestamps
+from audio_denoiser.AudioDenoiser import AudioDenoiser
+import subprocess
+from typing import Generator
 
 import numpy as np
 
 import filetype
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket
+from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,10 +24,8 @@ from moviepy.editor import VideoFileClip
 import os
 import tempfile
 
-
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
-
 
 from json import dumps
 
@@ -44,7 +45,7 @@ from dotenv import load_dotenv
 import torch
 from moviepy.editor import *
 from pydub import AudioSegment
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -86,6 +87,8 @@ current_settings = {
     "model": "openai/whisper-large-v3-turbo",
     "lang": "auto"
 }
+
+full_transcription =  []
 
 # Charger les modèles
 # diarization_model = Pipeline.from_pretrained("pyannote/speaker-diarization")
@@ -250,7 +253,6 @@ def update_settings(settings: Settings):
 @app.post("/uploadfile/")
 async def upload_file(file: UploadFile = File(...)):
     file_path = f"/tmp/{file.filename}"
-    full_transcription =  []
     # Détection de l'extension du fichier
     file_extension = os.path.splitext(file_path)[1].lower()
     logging.debug(f"Extension détectée {file_extension}.")
@@ -420,12 +422,14 @@ async def upload_file(file: UploadFile = File(...)):
                 logging.debug(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
 
         # Retourner les résultats en streaming
+        logging.debug(f"->> fin de transcription <<")
+        logging.debug(full_transcription)
         return StreamingResponse(live_process_audio(), media_type="application/json")
 
 
     finally:
         logging.debug(f"->> fin de transcription <<")
-        print(full_transcription)
+        logging.debug(full_transcription)
 
         # Nettoyage : supprimer le fichier temporaire après traitement
         if os.path.exists(file_path):
@@ -535,6 +539,8 @@ async def websocket_audio_receiver(websocket: WebSocket):
     await websocket.accept()
     print("Client connecté, en attente des données")
 
+    denoiser = AudioDenoiser(device=device)
+
     try:
         while True:
             data = await websocket.receive_bytes()
@@ -564,6 +570,9 @@ async def websocket_audio_receiver(websocket: WebSocket):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
                     audio_segment.export(temp_file.name, format="wav")
                     
+                    denoiser.process_audio_file(temp_file.name, temp_file.name, auto_scale=True)
+
+
                 if current_settings['task'] != "transcribe":
                     generate_kwargs={"language": "english", "condition_on_prev_tokens": True} 
                 else:
@@ -597,7 +606,6 @@ async def websocket_audio_receiver(websocket: WebSocket):
         print("Client déconnecté")
 
 
-
 def convert_tracks_to_json(tracks):
     # Liste pour stocker les segments formatés
     formatted_segments = []
@@ -610,6 +618,18 @@ def convert_tracks_to_json(tracks):
     # Convertir la liste de segments en JSON
     # return json.dumps(formatted_segments)
     return formatted_segments
+
+# Libérer la mémoire GPU une fois que vous avez terminé
+def release_whisper_memory():
+    global whisper_pipeline
+    
+    try:
+        del Transcriber_Whisper  # Supprime la référence au modèle
+    except Exception as e:
+        logging.error(f"Impossible de supprimer le modèle : {e}")
+
+    torch.cuda.empty_cache()  # Vide le cache GPU pour libérer la mémoire
+    print("Le modèle Whisper a été libéré de la mémoire GPU.")
 
 
 def extract_audio(file_path):
@@ -675,3 +695,45 @@ def process_audio_chunk(data):
     print("Processed audio chunk of size:", len(data))
 
     return audio_chunk
+
+
+
+class QuestionWithTranscription(BaseModel):
+    question: str
+    transcription: str
+
+# Fonction pour exécuter la commande `ollama run` et obtenir la réponse du modèle
+def run_chocolatine_model(prompt):
+    command = [
+        "ollama", "run", "jpacifico/chocolatine-3b",
+        prompt
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    logging.debug("Command output:", result.stdout)  # Affiche la sortie pour vérification
+    logging.debug("Command error:", result.stderr)  # Affiche les erreurs éventuelles
+
+    return result.stdout.strip()
+
+
+# Fonction pour exécuter la commande en mode streaming
+def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
+    command = ["ollama", "run", "jpacifico/chocolatine-3b"]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    for line in process.stdout:
+        yield line.strip() + "\n"
+
+    process.stdout.close()
+    process.wait()
+
+@app.get("/ask_question/")
+async def ask_question(request: Request):
+    question = request.query_params.get("question")
+    transcription = request.query_params.get("transcription")
+
+    # Assurez-vous d'avoir les valeurs des paramètres
+    if not question or not transcription:
+        return {"error": "Les paramètres 'question' et 'transcription' sont requis."}
+
+    prompt = f"{transcription}\nQuestion: {question}\nRéponse:"
+    return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/event-stream")

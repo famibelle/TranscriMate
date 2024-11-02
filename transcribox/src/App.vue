@@ -112,6 +112,20 @@
             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
         </div>
 
+
+        <div class="stats-container">
+          <div class="stats-header">📊 Chatbot</div>
+          <div class="stats-body"></div>
+          <div id="app">
+            <QuestionForm :fullTranscription="fullTranscription" />
+          </div>
+          </div>
+          
+
+
+
+
+
         <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
         <div class="stats-container" v-if="diarization !== null">
           <div class="stats-header">📊 Statistiques</div>
@@ -228,10 +242,13 @@
 
 import axios from 'axios';
 import TaskToggle from './components/TaskToggle.vue'
+import QuestionForm from './components/QuestionForm.vue'
+
 
 export default {
   components: {
-    TaskToggle
+    TaskToggle,
+    QuestionForm
   },
 
   watch: {
