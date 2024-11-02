@@ -113,8 +113,8 @@
         </div>
 
 
-        <div class="stats-container">
-          <div class="stats-header">📊 Chatbot</div>
+        <div class="stats-container" v-if="isTranscriptionComplete">
+          <div class="stats-header">🤖 Chatbot</div>
           <div class="stats-body"></div>
           <div id="app">
             <QuestionForm :fullTranscription="fullTranscription" />

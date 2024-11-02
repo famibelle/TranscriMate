@@ -1,64 +1,89 @@
 <template>
-    <div>
-      <form @submit.prevent="askQuestion">
-        <input
-          v-model="question"
-          type="text"
-          placeholder="Entrez votre question ici"
-          required
-        />
-        <button type="submit">Envoyer</button>
-      </form>
+  <div>
+    <form @submit.prevent="askQuestion">
       <div v-if="response">
-        <h3>Réponse :</h3>
-        <p>{{ response }}</p>
-      </div>
+      <b>Réponse :</b>
+      <MarkdownRenderer :content="response" />
+
     </div>
+
+      <input
+        v-model="question"
+        type="text"
+        placeholder="Entrez votre question ici"
+        required
+      />
+      <button type="submit">Envoyer</button>
+    </form>
+
+  </div>
 </template>
-  
-  <script>
-  export default {
-    props: {
-      fullTranscription: String,
-    },
-    data() {
-      return {
-        question: '',
-        response: '',
-        eventSource: null,
+
+<script>
+import MarkdownRenderer from './MarkdownRenderer.vue';
+
+export default {
+  components: {
+    MarkdownRenderer
+  },
+
+  props: {
+    fullTranscription: String, // Transcription passée en prop depuis App.vue
+  },
+  data() {
+    return {
+      question: 'Fais une synthèse de la transcription',
+      response: '',
+    };
+  },
+  methods: {
+    async askQuestion() {
+      this.response = ''; // Réinitialise la réponse pour chaque nouvelle question
+
+      // Prépare les données de la requête
+      const requestData = {
+        question: this.question,
+        transcription: this.fullTranscription,
       };
-    },
-    methods: {
-      askQuestion() {
-        this.response = '';
-        if (this.eventSource) {
-          this.eventSource.close();
-        }
-  
-        // Envoie la transcription et la question en tant que paramètres de requête
-        const params = new URLSearchParams({
-          question: this.question,
-          transcription: this.fullTranscription,
-        });
-  
-        this.eventSource = new EventSource(`/ask_question/?${params.toString()}`);
-  
-        this.eventSource.onmessage = (event) => {
-            console.log("Received data:", event.data);  // Log chaque segment de la réponse
-            this.response += event.data;  // Ajoute progressivement chaque partie de la réponse
-        };
-  
-        this.eventSource.onerror = () => {
-            console.error("Erreur de connexion avec EventSource");
-            this.eventSource.close();
-        };
-      },
-    },
-    beforeDestroy() {
-      if (this.eventSource) {
-        this.eventSource.close();
+
+      // Utilise fetch pour envoyer une requête POST et gérer la réponse en continu
+      const response = await fetch('/ask_question/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      // Gère la lecture en streaming
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+
+      // Lit et décode les données en continu
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        this.response += decoder.decode(value, { stream: true }); // Affiche progressivement chaque segment
       }
     },
-  };
+  },
+};
 </script>
-  
+
+<style scoped>
+form {
+  margin-bottom: 20px;
+}
+input {
+  padding: 10px;
+  font-size: 16px;
+  margin-right: 10px;
+}
+button {
+  padding: 10px;
+  font-size: 16px;
+}
+h3 {
+  margin-top: 20px;
+}
+</style>

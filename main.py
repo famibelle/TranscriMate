@@ -6,6 +6,7 @@ import subprocess
 from typing import Generator
 
 import numpy as np
+import asyncio
 
 import filetype
 
@@ -714,26 +715,38 @@ def run_chocolatine_model(prompt):
 
     return result.stdout.strip()
 
+# Modèle de données pour la requête POST
+class QuestionWithTranscription(BaseModel):
+    question: str
+    transcription: str
 
 # Fonction pour exécuter la commande en mode streaming
 def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
-    command = ["ollama", "run", "jpacifico/chocolatine-3b"]
+    # Commande pour lancer le modèle
+    command = ["ollama", "run", "jpacifico/chocolatine-3b", prompt]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    # Envoie chaque ligne produite par le modèle
     for line in process.stdout:
-        yield line.strip() + "\n"
+        yield f"{line.strip()}\n"  # Envoie chaque ligne de sortie avec un saut de ligne
+        # await asyncio.sleep(0)  # Forcer l'envoi de chaque chunk
 
+    # Termine le processus
     process.stdout.close()
     process.wait()
 
-@app.get("/ask_question/")
-async def ask_question(request: Request):
-    question = request.query_params.get("question")
-    transcription = request.query_params.get("transcription")
+# Route POST pour le streaming
+@app.post("/ask_question/")
+async def ask_question(data: QuestionWithTranscription):
+    # Crée le prompt pour le modèle à partir de la question et de la transcription
+    prompt = f"""
+Voici la transcription: 
+{data.transcription}
 
-    # Assurez-vous d'avoir les valeurs des paramètres
-    if not question or not transcription:
-        return {"error": "Les paramètres 'question' et 'transcription' sont requis."}
-
-    prompt = f"{transcription}\nQuestion: {question}\nRéponse:"
+Voici la Question: {data.question}
+Réfléchis et apporte une réponse à la question. 
+Ta réponse sera au format markdown:
+"""
+    
+    # Renvoie une réponse en streaming avec StreamingResponse
     return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/event-stream")
