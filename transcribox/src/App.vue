@@ -105,7 +105,8 @@
 
         <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
         <div v-if="transcriptions.length > 0" class="transcription-full-container">
-          <div class="transcription-header">📝 {{ isTranscriptionComplete ? "Transcription complète" : "Transcription en cours ..." }}
+          <div class="transcription-header">📝 {{ isTranscriptionComplete ? "Transcription complète" : "Transcription en cours à " }} {{isTranscriptionComplete ?  " " : transcriptionProgress.toFixed(2)}}
+            
           </div>
           <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
           <textarea v-model="fullTranscription" class="transcription-textarea" readonly
@@ -117,7 +118,10 @@
           <div class="stats-header">🤖 Chatbot</div>
           <div class="stats-body"></div>
           <div id="app">
-            <QuestionForm :fullTranscription="fullTranscription" />
+            <QuestionForm 
+            :fullTranscription="fullTranscription"
+            :chat_model="settings.chat_model"
+            />
           </div>
           </div>
           
@@ -145,6 +149,39 @@
             </ul>
           </div>
         </div>
+
+        <!-- Paramètre -->
+        <div class="stats-container">
+          <div class="stats-header">⚙️ Paramètres du Chatbot</div>
+          <div class="settings-group">
+            </div>
+          <!-- Fenêtre modale pour les paramètres de transcription -->
+          <div class="settings-modal">
+              <div>
+                <div>
+                  <CustomToggle v-model="settings.chat_model" 
+                    :leftOption="{ value: 'gpt-4', label: 'GPT' }"
+                    :rightOption="{ value: 'chocolatine', label: 'Chocolatine🍫🥖' }"
+                    :width="300"
+                    :height="40"
+                    activeColor="#2196F3"
+                    backgroundColor="#f0f0f0"
+                    textColor="#666"                  
+                  />
+                </div>
+              </div>
+              <div>
+                <!-- <label>Model:</label>
+                <select v-model="settings.model">
+                  <option v-for="model in availableModels" :value="model">{{ model }}</option>
+                </select> -->
+              </div>
+              <div>
+              </div>
+              <!-- <button @click="saveSettings">Save</button>
+              <button @click="closeSettings">Close</button> -->
+            </div>
+          </div>
        
       </div>
 
@@ -211,14 +248,22 @@
 
         <!-- Paramètre -->
         <div class="stats-container">
-          <div class="stats-header">⚙️ Paramètres</div>
+          <div class="stats-header">⚙️ Paramètres généraux</div>
           <div class="settings-group">
             </div>
           <!-- Fenêtre modale pour les paramètres de transcription -->
           <div class="settings-modal">
               <div>
                 <div>
-                  <TaskToggle v-model="settings.task" />
+                  <CustomToggle  v-model="settings.task" 
+                    :leftOption="{ value: 'transcribe', label: 'Transcribe' }"
+                    :rightOption="{ value: 'translate', label: 'Translate' }"
+                    :width="200"
+                    :height="40"
+                    activeColor="#2196F3"
+                    backgroundColor="#f0f0f0"
+                    textColor="#666"
+                  />
                 </div>
               </div>
               <div>
@@ -232,27 +277,29 @@
               <!-- <button @click="saveSettings">Save</button>
               <button @click="closeSettings">Close</button> -->
             </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 </template>
 
 <script>
 
 import axios from 'axios';
 import TaskToggle from './components/TaskToggle.vue'
+import CustomToggle from './components/CustomToggle.vue'
 import QuestionForm from './components/QuestionForm.vue'
 
 
 export default {
   components: {
     TaskToggle,
+    CustomToggle,
     QuestionForm
   },
 
   watch: {
-    'settings.task': {
+    'settings': {
       // handler(newVal, oldVal) {
         handler() {
         // Appeler saveSettings chaque fois que settings.task change
@@ -283,6 +330,7 @@ export default {
         task: "transcribe", // valeur par défaut
         model: "openai/whisper-large-v3-turbo",
         lang: "auto",
+        chat_model: 'chocolatine'
       },
 
       availableModels: [
@@ -878,8 +926,10 @@ export default {
 
     async saveSettings() {
       try {
-        console.log('Settings being sent:', this.settings);
+        console.log('Settings envoyés:', this.settings);
         const response = await axios.post('/settings/', this.settings);
+        console.log("chat_model dans App.vue:", this.settings.chat_model);
+
         console.log('Response:', response.data);
       } catch (error) {
         console.log('Full error:', error);

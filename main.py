@@ -30,7 +30,7 @@ from pyannote.audio.pipelines.utils.hook import ProgressHook
 
 from json import dumps
 
-import os
+from openai import OpenAI
 import json
 import re
 import time
@@ -57,7 +57,9 @@ TEMP_FOLDER = '/tmp/'
 HF_cache = '/mnt/.cache/'
 Model_dir = '/mnt/Models'
 
-HUGGING_FACE_KEY =  os.environ.get("HuggingFace_API_KEY")
+HUGGING_FACE_KEY = os.environ.get("HuggingFace_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY_MCF")
+
 server_url = os.getenv("SERVER_URL")
 
 # Dossier pour les transcriptions
@@ -86,7 +88,8 @@ else:
 current_settings = {
     "task": "transcribe",
     "model": "openai/whisper-large-v3-turbo",
-    "lang": "auto"
+    "lang": "auto",
+    "chat_model": "chocolatine"
 }
 
 full_transcription =  []
@@ -215,6 +218,7 @@ class Settings(BaseModel):
     task: StrictStr = "transcribe"
     model: StrictStr = "openai/whisper-large-v3-turbo"  # Valeur par défaut
     lang: StrictStr = "auto"  # Valeur par défaut
+    chat_model: StrictStr = "chocolatine"
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -699,9 +703,6 @@ def process_audio_chunk(data):
 
 
 
-class QuestionWithTranscription(BaseModel):
-    question: str
-    transcription: str
 
 # Fonction pour exécuter la commande `ollama run` et obtenir la réponse du modèle
 def run_chocolatine_model(prompt):
@@ -719,6 +720,7 @@ def run_chocolatine_model(prompt):
 class QuestionWithTranscription(BaseModel):
     question: str
     transcription: str
+    chat_model: str
 
 # Fonction pour exécuter la commande en mode streaming
 def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
@@ -741,19 +743,85 @@ def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     # Indique la fin du streaming
     yield "event: end\ndata: Le streaming est terminé\n\n"
 
+# Fonction pour exécuter la commande en mode streaming avec gpt4o-mini
+def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
+    client = OpenAI(api_key=os.environ.get(OPENAI_API_KEY))
+    OpenAI.api_key = os.getenv(OPENAI_API_KEY)
+
+    # Indique le début du streaming
+    yield "event: start\ndata: Le streaming a commencé\n\n"
+
+    try:
+        # Création du stream avec gpt4o-mini
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=prompt,
+            stream=True,
+        )
+
+        buffer = ''
+        for chunk in response:
+            delta = chunk.choices[0].delta
+            content = getattr(delta, 'content', '')
+            if content:
+                buffer += content
+
+                # Vérifier si le buffer contient une ligne complète (terminée par '\n')
+                while '\n' in buffer:
+                    line, buffer = buffer.split('\n', 1)
+                    # Envoyer la ligne complète au frontend
+                    yield f"data: {line}\n\n"
+
+        # Envoyer le reste du buffer s'il y a du contenu
+        if buffer:
+            yield f"data: {buffer}\n\n"
+
+    except Exception as e:
+        # Capture toute autre exception
+        yield f"event: error\ndata: Exception: {str(e)}\n\n"
+
+    # Indique la fin du streaming
+    yield "event: end\ndata: Le streaming est terminé\n\n"
 
 # Route POST pour le streaming
 @app.post("/ask_question/")
 async def ask_question(data: QuestionWithTranscription):
     # Crée le prompt pour le modèle à partir de la question et de la transcription
-    prompt = f"""
-Voici la transcription: 
-{data.transcription}
+    prompt_chocolatine = f""" 
+Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation. Utilisez uniquement les informations contenues dans la transcription pour répondre.
 
-Voici la Question: {data.question}
-Réfléchis et apporte une réponse à la question. 
-Ta réponse sera au format markdown, les points importants seront en gras:
-"""
+Voici la transcription de la conversation :\n\n{data.transcription}"
+Votre réponse doit être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique, et doit être inférieure à 500 mots"
+
+Voici la demande de l'utilisateur : {data.question}
+""" 
     
+    prompt_gpt = [ 
+        {"role": "system", "content": "Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation. Utilisez uniquement les informations contenues dans la transcription pour répondre."},
+        {"role": "user", "content": f"Voici la transcription de la conversation :\n\n{data.transcription}"},
+        {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique."},
+        {"role": "user", "content": f"Voici la demande de l'utilisateur : {data.question}"},
+    ]
+
+    if  data.chat_model == "chocolatine":
+        prompt = prompt_chocolatine
+    else:
+        prompt = prompt_gpt
+
+    logging.info(f"""
+vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+Prompt envoyé {prompt}
+Modèle utilisé: {data.chat_model}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""")
     # Renvoie une réponse en streaming avec StreamingResponse
-    return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/event-stream")
+    # return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/event-stream")
+    # Choix de la fonction en fonction du modèle
+    streaming_function = run_chocolatine_streaming if data.chat_model == "chocolatine" else run_gpt4o_mini_streaming
+    try:
+        return StreamingResponse(streaming_function(prompt), media_type="text/markdown")
+    except Exception as e:
+        # Gestion de l'erreur en cas de problème avec l'API OpenAI
+        error_message = f"Erreur lors de la communication avec le modèle {data.model_type}: {str(e)}"
+    raise HTTPException(status_code=502, detail=error_message)   
+

@@ -1,8 +1,15 @@
 <template>
   <div>
-    <!-- Affiche la réponse en Markdown, placé en dehors du formulaire -->
+    <!-- Affiche la réponse en Markdown  -->
     <div v-if="response" style="margin-bottom: 20px;">
       <MarkdownRenderer :content="response" />
+      <!-- Bouton de copie avec emoji 📋 -->
+      <button @click="copyToClipboard" class="copy-button" title="Copier">
+        📋
+        <!-- Tooltip pour afficher "Copier" après un délai -->
+        <span class="tooltip">Copier</span>
+      </button>
+
     </div>
     
     <!-- Formulaire avec le champ de texte et le bouton, alignés en ligne -->
@@ -34,6 +41,7 @@ export default {
 
   props: {
     fullTranscription: String, // Transcription passée en prop depuis App.vue
+    chat_model: String
   },
   data() {
     return {
@@ -52,6 +60,16 @@ export default {
   },
 
   methods: {
+
+    // Fonction pour copier la réponse dans le presse-papiers
+    copyToClipboard() {
+      navigator.clipboard.writeText(this.response).then(() => {
+        // alert("Réponse copiée dans le presse-papiers !");
+      }).catch(err => {
+        console.error("Erreur lors de la copie : ", err);
+      });
+    },
+
     async askQuestion() {
       // Réinitialise les états de streaming et de réponse au début de chaque requête
       this.isStreamingChatResponse = true; // Active l'état de streaming
@@ -61,7 +79,12 @@ export default {
       const requestData = {
         question: this.question,
         transcription: this.fullTranscription,
+        // chat_model: 'chocolatine'
+        chat_model: this.chat_model // Utilisation de la prop
       };
+
+      console.log("Données envoyées :", requestData);
+
 
       try {
         // Utilise fetch pour envoyer une requête POST et gérer la réponse en continu
