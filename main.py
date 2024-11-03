@@ -759,22 +759,25 @@ def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
             stream=True,
         )
 
-        buffer = ''
+        buffer = ""
         for chunk in response:
             delta = chunk.choices[0].delta
             content = getattr(delta, 'content', '')
+
+            # Si du contenu est présent dans le chunk
             if content:
                 buffer += content
 
-                # Vérifier si le buffer contient une ligne complète (terminée par '\n')
-                while '\n' in buffer:
-                    line, buffer = buffer.split('\n', 1)
-                    # Envoyer la ligne complète au frontend
-                    yield f"data: {line}\n\n"
+                # Accumuler suffisamment de contenu avant de l'envoyer
+                # Envoyer lorsque le buffer contient au moins 2 sauts de ligne consécutifs (indiquant la fin d'un paragraphe ou d'une section)
+                if buffer.count('\n') >= 2:
+                    yield f"{buffer}\n\n"
+                    buffer = ""
 
-        # Envoyer le reste du buffer s'il y a du contenu
-        if buffer:
-            yield f"data: {buffer}\n\n"
+        # Envoyer le reste du buffer s'il y a du contenu restant
+        if buffer.strip():
+            yield f"{buffer}\n\n"
+
 
     except Exception as e:
         # Capture toute autre exception
@@ -782,6 +785,8 @@ def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
 
     # Indique la fin du streaming
     yield "event: end\ndata: Le streaming est terminé\n\n"
+
+
 
 # Route POST pour le streaming
 @app.post("/ask_question/")
@@ -814,14 +819,20 @@ Prompt envoyé {prompt}
 Modèle utilisé: {data.chat_model}
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 """)
-    # Renvoie une réponse en streaming avec StreamingResponse
-    # return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/event-stream")
-    # Choix de la fonction en fonction du modèle
-    streaming_function = run_chocolatine_streaming if data.chat_model == "chocolatine" else run_gpt4o_mini_streaming
+    
+    # Sélection du prompt et de la fonction de streaming en fonction du modèle
+    if data.chat_model == "chocolatine":
+        prompt = prompt_chocolatine
+        streaming_function = run_chocolatine_streaming
+    else:
+        prompt = prompt_gpt
+        streaming_function = run_gpt4o_mini_streaming  # Remplacez par la fonction adéquate si nécessaire
+
     try:
+        # Renvoie une réponse en streaming avec StreamingResponse
         return StreamingResponse(streaming_function(prompt), media_type="text/markdown")
     except Exception as e:
         # Gestion de l'erreur en cas de problème avec l'API OpenAI
-        error_message = f"Erreur lors de la communication avec le modèle {data.model_type}: {str(e)}"
-    raise HTTPException(status_code=502, detail=error_message)   
+        error_message = f"Erreur lors de la communication avec le modèle {data.chat_model}: {str(e)}"
+        raise HTTPException(status_code=502, detail=error_message) 
 
