@@ -3,6 +3,7 @@
     <!-- Affiche la réponse en Markdown  -->
     <div v-if="response" style="margin-bottom: 20px;">
       <MarkdownRenderer :content="response" />
+      <!-- <div>{{response}}</div> -->
       <!-- Bouton de copie avec emoji 📋 -->
       <button @click="copyToClipboard" class="copy-button" title="Copier">
         📋
@@ -107,16 +108,29 @@ export default {
 
           // Décode chaque chunk de données
           const chunk = decoder.decode(value, { stream: true });
+          console.log("Chunks reçus :\n", chunk);
 
-          // Vérifie si le chunk contient "event: start" ou "event: end"
-          if (chunk.includes("event: start") || chunk.includes("event: end")) {
-            continue; // Ignore les messages de début et de fin du streaming
+          // Divise le chunk en lignes
+          const lines = chunk.split("\n");
+
+          for (let line of lines) {
+            line = line.trim(); // Supprime les espaces supplémentaires
+
+            // Vérifie si la ligne contient "event: start" ou "event: end"
+            if (line.startsWith("event: start") || line.startsWith("event: end") || !line.startsWith("data:")) {
+              continue; // Ignore les messages de début, de fin ou les lignes qui ne contiennent pas de données utiles
+            }
+
+            // Extraire uniquement le contenu de la ligne
+            const content = line.replace("data:", "").trim();
+            if (content) {
+              this.response += content; // Ajoute le texte sans ajouter de saut de ligne systématiquement
+            }
           }
 
-          // Ajoute uniquement le contenu des chunks à la réponse
-          this.response += chunk.replace("data: ", "").trim();
-
+          console.log("Réponse complète :\n", this.response);
         }
+
       } catch (error) {
         console.error("Erreur lors du streaming :", error);
       } finally {

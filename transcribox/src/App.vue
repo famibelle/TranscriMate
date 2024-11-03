@@ -286,14 +286,14 @@
 <script>
 
 import axios from 'axios';
-import TaskToggle from './components/TaskToggle.vue'
+// import TaskToggle from './components/TaskToggle.vue'
 import CustomToggle from './components/CustomToggle.vue'
 import QuestionForm from './components/QuestionForm.vue'
 
 
 export default {
   components: {
-    TaskToggle,
+    // TaskToggle,
     CustomToggle,
     QuestionForm
   },

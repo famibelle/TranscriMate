@@ -165,32 +165,32 @@ async def upload_file(file: UploadFile = File(...)):
 
     # Détection de l'extension du fichier
     file_extension = os.path.splitext(file_path)[1].lower()
-    logging.debug(f"Extension détectée {file_extension}.")
+    logging.info(f"Extension détectée {file_extension}.")
 
     try:
         # Sauvegarder temporairement le fichier uploadé
         with open(file_path, "wb") as f:
             f.write(await file.read())
-        logging.debug(f"Fichier {file.filename} sauvegardé avec succès.")
+        logging.info(f"Fichier {file.filename} sauvegardé avec succès.")
         # Si le fichier est un fichier audio (formats courants)
         if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
-            logging.debug(f"fichier audio détecté: {file_extension}.")
+            logging.info(f"fichier audio détecté: {file_extension}.")
             # Charger le fichier audio avec Pydub
             audio = AudioSegment.from_file(file_path)
 
         elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
-            logging.debug(f"fichier vidéo détecté: {file_extension}.")
+            logging.info(f"fichier vidéo détecté: {file_extension}.")
             video_clip = VideoFileClip(file_path)
             audio = AudioSegment.from_file(file_path, format=file.filename)
 
-        logging.debug(f"Conversion du {file.filename} en mono 16kHz.")
+        logging.info(f"Conversion du {file.filename} en mono 16kHz.")
 
         audio = audio.set_channels(1)
         audio = audio.set_frame_rate(16000)
         
         audio_path = f"{file_path}.wav"
         
-        logging.debug(f"Sauvegarde de la piste audio dans {audio_path}.")
+        logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
 
         audio.export(audio_path, format="wav")
 
@@ -203,15 +203,15 @@ async def upload_file(file: UploadFile = File(...)):
             diarization = diarization_model(audio_path, hook=hook)
 
         diarization_json = convert_tracks_to_json(diarization)
-        logging.debug(f"Résultat de la diarization {diarization_json}")
+        logging.info(f"Résultat de la diarization {diarization_json}")
         return diarization_json
         
     finally:
-        logging.debug(f"->> fin de diarization <<")
+        logging.info(f"->> fin de diarization <<")
         # Nettoyage : supprimer le fichier temporaire après traitement
         if os.path.exists(file_path):
             os.remove(file_path)
-            logging.debug(f"Fichier temporaire {file_path} supprimé.")
+            logging.info(f"Fichier temporaire {file_path} supprimé.")
 
 
 class Settings(BaseModel):
@@ -250,7 +250,7 @@ def update_settings(settings: Settings):
     # Logique de mise à jour des paramètres côté backend
     # Enregistrez les paramètres dans une base de données ou un fichier de configuration, par exemple
     current_settings = settings.model_dump()  # Mettez à jour la variable globale
-    logging.debug(f"Settings: {current_settings}, task: {current_settings['task']}")
+    logging.info(f"Settings: {current_settings}, task: {current_settings['task']}")
 
     return {"message": "Paramètres mis à jour avec succès"}
 
@@ -260,7 +260,7 @@ async def upload_file(file: UploadFile = File(...)):
     file_path = f"/tmp/{file.filename}"
     # Détection de l'extension du fichier
     file_extension = os.path.splitext(file_path)[1].lower()
-    logging.debug(f"Extension détectée {file_extension}.")
+    logging.info(f"Extension détectée {file_extension}.")
 
     # audio = extract_audio(file_path)
     
@@ -278,16 +278,16 @@ async def upload_file(file: UploadFile = File(...)):
         # Sauvegarder temporairement le fichier uploadé
         with open(file_path, "wb") as f:
             f.write(await file.read())
-        logging.debug(f"Fichier {file.filename} sauvegardé avec succès.")
+        logging.info(f"Fichier {file.filename} sauvegardé avec succès.")
 
         file_type = filetype.guess(file_path)
-        logging.debug(f"Type de fichier : {file_type.mime}, Extension : {file_type.extension}")
+        logging.info(f"Type de fichier : {file_type.mime}, Extension : {file_type.extension}")
 
         extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
 
         # Si le fichier est un fichier audio (formats courants)
         if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
-            logging.debug(f"fichier audio détecté: {file_extension}.")
+            logging.info(f"fichier audio détecté: {file_extension}.")
 
             # Charger le fichier audio avec Pydub
             # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
@@ -296,25 +296,25 @@ async def upload_file(file: UploadFile = File(...)):
 
 
         elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
-            logging.debug(f"fichier vidéo détecté: {file_extension}.")
+            logging.info(f"fichier vidéo détecté: {file_extension}.")
             video_clip = VideoFileClip(file_path)
-            logging.debug("Extraction Audio démarrée ...")
+            logging.info("Extraction Audio démarrée ...")
 
             # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
-            logging.debug(extraction_status)
+            logging.info(extraction_status)
             # yield f"{extraction_status}\n"
 
             audio = AudioSegment.from_file(file_path, format=file_type.extension)
 
             # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
-            logging.debug(extraction_status)
+            logging.info(extraction_status)
             # yield f"{extraction_status}\n"
 
-        logging.debug(f"Conversion du {file.filename} en mono 16kHz.")
+        logging.info(f"Conversion du {file.filename} en mono 16kHz.")
         audio = audio.set_channels(1)
         audio = audio.set_frame_rate(16000)
         audio_path = f"{file_path}.wav"
-        logging.debug(f"Sauvegarde de la piste audio dans {audio_path}.")
+        logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
         audio.export(audio_path, format="wav")
 
         # Vérification si le fichier existe
@@ -323,18 +323,18 @@ async def upload_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=404, detail=f"Le fichier {audio_path} n'existe pas.")
 
         # Étape 1 : Diarisation
-        logging.debug(f"Démarrage de la diarisation du fichier {audio_path}")
+        logging.info(f"Démarrage de la diarisation du fichier {audio_path}")
 
         async def live_process_audio():
             extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
             yield f"{extraction_status}\n"
-            logging.debug(extraction_status)
+            logging.info(extraction_status)
 
             # Envoi du statut "en cours"
             start_diarization = json.dumps({'status': 'diarization_processing', 'message': 'Séparation des voix en cours...'})
             yield f"{start_diarization}\n"
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
-            logging.debug(start_diarization)
+            logging.info(start_diarization)
 
             with ProgressHook() as hook:
                 diarization = diarization_model(audio_path, hook=hook)
@@ -343,24 +343,24 @@ async def upload_file(file: UploadFile = File(...)):
             end_diarization = json.dumps({'status': 'diarization_done', 'message': 'Séparation des voix terminée.'})
             yield f"{end_diarization}\n"
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
-            logging.debug(end_diarization)
+            logging.info(end_diarization)
 
             diarization_json = convert_tracks_to_json(diarization)
 
             # Envoyer la diarisation complète d'abord
-            logging.debug(f"{json.dumps({'diarization': diarization_json})}")
+            logging.info(f"{json.dumps({'diarization': diarization_json})}")
             yield f"{json.dumps({'diarization': diarization_json})}\n"
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
     
             # Exporter les segments pour chaque locuteur
             total_chunks = len(list(diarization.itertracks(yield_label=True))) 
-            logging.debug(f"total_turns: {total_chunks}")
+            logging.info(f"total_turns: {total_chunks}")
             
             turn_number = 0
             # for turn, _, speaker in tqdm(diarization.itertracks(yield_label=True), total=total_turns, desc="Processing turns"):
             for turn, _, speaker in diarization.itertracks(yield_label=True):
                 turn_number += 1
-                logging.debug(f"Tour {turn_number}/{total_chunks}")
+                logging.info(f"Tour {turn_number}/{total_chunks}")
 
                 # Étape 2 : Transcription pour chaque segment
                 start_ms = int(turn.start * 1000)  # Convertir de secondes en millisecondes
@@ -373,7 +373,7 @@ async def upload_file(file: UploadFile = File(...)):
                 segment_path = f"/tmp/segment_{start_ms}_{end_ms}.wav"
                 segment_audio.export(segment_path, format="wav")
 
-                logging.debug(f"----> Transcription démarée avec le model <{model_settings}> et la task <{task}> <----")
+                logging.info(f"----> Transcription démarée avec le model <{model_settings}> et la task <{task}> <----")
 
                 # generate_kwargs = {
                 #     "max_new_tokens": 448,
@@ -418,28 +418,28 @@ async def upload_file(file: UploadFile = File(...)):
                     "audio_url": f"{server_url}/segment_audio/{os.path.basename(segment_path)}"  # URL du fichier audio
                 }
 
-                logging.debug(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée\n Résultat de la transcription {segment}")
+                logging.info(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée\n Résultat de la transcription {segment}")
                 full_transcription.append(segment)
 
                 yield f"{json.dumps(segment)}\n"  # Envoi du segment de transcription en JSON
                 await asyncio.sleep(0)  # Forcer l'envoi de chaque chunk
 
-                logging.debug(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
+                logging.info(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
 
         # Retourner les résultats en streaming
-        logging.debug(f"->> fin de transcription <<")
-        logging.debug(full_transcription)
+        logging.info(f"->> fin de transcription <<")
+        logging.info(full_transcription)
         return StreamingResponse(live_process_audio(), media_type="application/json")
 
 
     finally:
-        logging.debug(f"->> fin de transcription <<")
-        logging.debug(full_transcription)
+        logging.info(f"->> fin de transcription <<")
+        logging.info(full_transcription)
 
         # Nettoyage : supprimer le fichier temporaire après traitement
         if os.path.exists(file_path):
             os.remove(file_path)
-            logging.debug(f"Fichier temporaire {file_path} supprimé.")
+            logging.info(f"Fichier temporaire {file_path} supprimé.")
 
 
 # Endpoint pour générer les URLs des segments audio
@@ -483,10 +483,10 @@ async def process_audio(file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             f.write(await file.read())
 
-        logging.debug(f"Fichier {file.filename} sauvegardé avec succès.")
+        logging.info(f"Fichier {file.filename} sauvegardé avec succès.")
         
         # Démarrer la diarisation
-        logging.debug("Démarrage de la diarisation")
+        logging.info("Démarrage de la diarisation")
 
         # Étape 1 : Diarisation
         with ProgressHook() as hook:
@@ -516,7 +516,7 @@ async def process_audio(file: UploadFile = File(...)):
                 generate_kwargs={"task": "transcribe"}
                 )
             # Étape 2 : Transcription pour chaque segment
-            logging.debug(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée")
+            logging.info(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée")
             
             segments.append({
                 "speaker": speaker,
@@ -524,7 +524,7 @@ async def process_audio(file: UploadFile = File(...)):
                 "start_time": turn.start,
                 "end_time": turn.end
             })
-        logging.debug("Transcription terminée.")
+        logging.info("Transcription terminée.")
 
         return {"transcriptions": segments}
 
@@ -532,11 +532,11 @@ async def process_audio(file: UploadFile = File(...)):
         # Nettoyage : supprimer le fichier temporaire après traitement
         if os.path.exists(audio_path):
             os.remove(audio_path)
-            logging.debug(f"Fichier temporaire {audio_path} supprimé.")
+            logging.info(f"Fichier temporaire {audio_path} supprimé.")
 
 
 # Charger le modèle Silero VAD
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=True)
+model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
 get_speech_timestamps = utils['get_speech_timestamps'] if isinstance(utils, dict) else utils[0]
 
 @app.websocket("/streaming_audio/")
@@ -648,18 +648,18 @@ def extract_audio(file_path):
         logging.error(f"Type de fichier non reconnu pour : {file_path}")
         return None
         
-    logging.debug(f"Type de fichier détecté : {file_type.mime}, Extension : {file_type.extension}")
+    logging.info(f"Type de fichier détecté : {file_type.mime}, Extension : {file_type.extension}")
     
     try:
         # Gestion des fichiers audio
         if file_type.mime.startswith('audio/'):
-            logging.debug(f"Fichier audio détecté : {file_type.mime}")
+            logging.info(f"Fichier audio détecté : {file_type.mime}")
             return AudioSegment.from_file(file_path)
                 
         # Gestion des fichiers vidéo
         elif file_type.mime.startswith('video/'):
-            logging.debug(f"Fichier vidéo détecté : {file_type.mime}")
-            logging.debug("Extraction Audio démarrée ...")
+            logging.info(f"Fichier vidéo détecté : {file_type.mime}")
+            logging.info("Extraction Audio démarrée ...")
             
             # Créer un fichier temporaire pour l'audio extrait
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_audio:
@@ -711,8 +711,8 @@ def run_chocolatine_model(prompt):
         prompt
     ]
     result = subprocess.run(command, capture_output=True, text=True)
-    logging.debug("Command output:", result.stdout)  # Affiche la sortie pour vérification
-    logging.debug("Command error:", result.stderr)  # Affiche les erreurs éventuelles
+    logging.info("Command output:", result.stdout)  # Affiche la sortie pour vérification
+    logging.info("Command error:", result.stderr)  # Affiche les erreurs éventuelles
 
     return result.stdout.strip()
 
@@ -726,7 +726,7 @@ class QuestionWithTranscription(BaseModel):
 def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     # Indique le début du streaming
     yield "event: start\ndata: Le streaming a commencé\n\n"
-  
+
       # Commande pour lancer le modèle
     command = ["ollama", "run", "jpacifico/chocolatine-3b", prompt]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -743,48 +743,62 @@ def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     # Indique la fin du streaming
     yield "event: end\ndata: Le streaming est terminé\n\n"
 
+# Fonction pour vérifier si un buffer se termine par un caractère UTF-8 complet
+def is_valid_utf8(buffer: str) -> bool:
+    try:
+        buffer.encode('utf-8').decode('utf-8')
+        return True
+    except UnicodeDecodeError:
+        return False
+
 # Fonction pour exécuter la commande en mode streaming avec gpt4o-mini
 def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
-    client = OpenAI(api_key=os.environ.get(OPENAI_API_KEY))
-    OpenAI.api_key = os.getenv(OPENAI_API_KEY)
-
-    # Indique le début du streaming
-    yield "event: start\ndata: Le streaming a commencé\n\n"
-
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
     try:
-        # Création du stream avec gpt4o-mini
+        # Envoyer la réponse formatée pour le streaming
+        yield "event: start\n"
+        yield "data: Le streaming a commencé\n\n"
+
+        # Création de la réponse en streaming
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=prompt,
-            stream=True,
+            stream=True
         )
-
+ 
         buffer = ""
+        # Envoie chaque chunk produit par le modèle
         for chunk in response:
-            delta = chunk.choices[0].delta
-            content = getattr(delta, 'content', '')
+            delta = chunk.choices[0].delta.content if hasattr(chunk.choices[0].delta, 'content') else ""
+            if delta:
+                buffer += delta
 
-            # Si du contenu est présent dans le chunk
-            if content:
-                buffer += content
-
-                # Accumuler suffisamment de contenu avant de l'envoyer
-                # Envoyer lorsque le buffer contient au moins 2 sauts de ligne consécutifs (indiquant la fin d'un paragraphe ou d'une section)
-                if buffer.count('\n') >= 2:
-                    yield f"{buffer}\n\n"
+                # Traiter les points : si le buffer commence par un numéro suivi de '.', on considère que c'est un nouveau point de liste
+                if buffer.lstrip().startswith(tuple(f"{i}." for i in range(1, 10))) or buffer.lstrip().startswith("-"):
+                    # Ajoute une double nouvelle ligne avant chaque énumération pour mieux les séparer
+                    yield f"data: \n{buffer.strip()}\n\n"
+                    logging.debug(f"Chunk envoyé : {buffer.strip()}")
+                    buffer = ""
+                
+                # Si le buffer contient une phrase complète
+                elif buffer.endswith((".", "?", "!", "\n")):
+                    # Ajouter une double nouvelle ligne après chaque phrase complète
+                    yield f"data: {buffer.strip()}\n\n"
+                    logging.debug(f"Chunk envoyé : {buffer.strip()}")
                     buffer = ""
 
-        # Envoyer le reste du buffer s'il y a du contenu restant
-        if buffer.strip():
-            yield f"{buffer}\n\n"
+        # Envoie tout le contenu restant dans le buffer
+        if buffer:
+            yield f"data: {buffer.strip()}\n\n"
+            logging.debug(f"Chunk final envoyé : {buffer.strip()}")
 
+        yield "data: Streaming terminé\n\n"
+        yield "event: end\n"
 
     except Exception as e:
-        # Capture toute autre exception
-        yield f"event: error\ndata: Exception: {str(e)}\n\n"
-
-    # Indique la fin du streaming
-    yield "event: end\ndata: Le streaming est terminé\n\n"
+        logging.error(f"Erreur GPT: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
@@ -793,18 +807,24 @@ def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
 async def ask_question(data: QuestionWithTranscription):
     # Crée le prompt pour le modèle à partir de la question et de la transcription
     prompt_chocolatine = f""" 
-Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation. Utilisez uniquement les informations contenues dans la transcription pour répondre.
+Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation.
 
-Voici la transcription de la conversation :\n\n{data.transcription}"
-Votre réponse doit être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique, et doit être inférieure à 500 mots"
+Voici les instructions à suivre pour la réponse:
+    les extraits pris dans la conversation seront entre guillements,
+    la réponse doit être inférieure à 500 mots
+    utilisez uniquement les informations contenues dans la transcription pour répondre.
 
+Voici ci dessous la transcription de la conversation entre crochets:
+    [\n\n{data.transcription}]
+    
 Voici la demande de l'utilisateur : {data.question}
-""" 
+"""
     
     prompt_gpt = [ 
-        {"role": "system", "content": "Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation. Utilisez uniquement les informations contenues dans la transcription pour répondre."},
+        {"role": "system", "content": "Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation."},
         {"role": "user", "content": f"Voici la transcription de la conversation :\n\n{data.transcription}"},
-        {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique."},
+        # {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique."},
+        {"role": "assistant", "content": "Les réponses doivent être formatées en texte brut (donc sans symbole markdown) parce que l'affichage coté frontend ne gère pas le markdown, pour une lecture agréable avec des retours à la ligne fréquents.  Utilisez uniquement les informations contenues dans la transcription pour répondre"},
         {"role": "user", "content": f"Voici la demande de l'utilisateur : {data.question}"},
     ]
 
@@ -830,7 +850,7 @@ Modèle utilisé: {data.chat_model}
 
     try:
         # Renvoie une réponse en streaming avec StreamingResponse
-        return StreamingResponse(streaming_function(prompt), media_type="text/markdown")
+        return StreamingResponse(streaming_function(prompt), media_type="text/plain")
     except Exception as e:
         # Gestion de l'erreur en cas de problème avec l'API OpenAI
         error_message = f"Erreur lors de la communication avec le modèle {data.chat_model}: {str(e)}"
