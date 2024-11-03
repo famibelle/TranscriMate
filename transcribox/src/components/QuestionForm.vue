@@ -45,7 +45,7 @@ export default {
   },
   data() {
     return {
-      question: 'Fais une synthèse structurée, et ne dépasse pas 500 mots',
+      question: 'Fais une synthèse structurée',
       response: '',
       isStreamingChatResponse: false // État pour suivre si le streaming de réponse du chat est en cours
     };

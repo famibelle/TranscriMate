@@ -105,7 +105,7 @@
 
         <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
         <div v-if="transcriptions.length > 0" class="transcription-full-container">
-          <div class="transcription-header">📝 {{ isTranscriptionComplete ? "Transcription complète" : "Transcription en cours à " }} {{isTranscriptionComplete ?  "" : transcriptionProgress.toFixed(2)}} {{isTranscriptionComplete ?  "%" : ""}}
+          <div class="transcription-header">📝 {{ isTranscriptionComplete ? "Transcription complète" : "Transcription en cours à " }} {{isTranscriptionComplete ?  "" : transcriptionProgress.toFixed(2)}} {{!isTranscriptionComplete ?  "%" : ""}}
             
           </div>
           <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
