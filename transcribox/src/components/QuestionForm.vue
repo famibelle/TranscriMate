@@ -80,15 +80,13 @@ export default {
       const requestData = {
         question: this.question,
         transcription: this.fullTranscription,
-        // chat_model: 'chocolatine'
         chat_model: this.chat_model // Utilisation de la prop
       };
 
       console.log("Données envoyées :", requestData);
 
-
       try {
-        // Utilise fetch pour envoyer une requête POST et gérer la réponse en continu
+        // Utilise fetch pour envoyer une requête POST et obtenir la réponse complète
         const response = await fetch('/ask_question/', {
           method: 'POST',
           headers: {
@@ -97,44 +95,16 @@ export default {
           body: JSON.stringify(requestData),
         });
 
-        // Gère la lecture en streaming
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-
-        // Lit et décode les données en continu
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          // Décode chaque chunk de données
-          const chunk = decoder.decode(value, { stream: true });
-          console.log("Chunks reçus :\n", chunk);
-
-          // Divise le chunk en lignes
-          const lines = chunk.split("\n");
-
-          for (let line of lines) {
-            line = line.trim(); // Supprime les espaces supplémentaires
-
-            // Vérifie si la ligne contient "event: start" ou "event: end"
-            if (line.startsWith("event: start") || line.startsWith("event: end") || !line.startsWith("data:")) {
-              continue; // Ignore les messages de début, de fin ou les lignes qui ne contiennent pas de données utiles
-            }
-
-            // Extraire uniquement le contenu de la ligne
-            const content = line.replace("data:", "").trim();
-            if (content) {
-              this.response += content; // Ajoute le texte sans ajouter de saut de ligne systématiquement
-            }
-          }
-
-          console.log("Réponse complète :\n", this.response);
-        }
-
-      } catch (error) {
-        console.error("Erreur lors du streaming :", error);
-      } finally {
-        // Assure que l'état de streaming est désactivé à la fin, même en cas d'erreur
+        // Lire la réponse en JSON
+        const result = await response.json();
+        this.response = result.response;
+        console.log("Réponse complète :", this.response);
+      } 
+      catch (error) {
+        console.error("Erreur lors de la récupération de la réponse :", error);
+      } 
+      finally {
+        // Assure que l'état de traitement est désactivé à la fin, même en cas d'erreur
         this.isStreamingChatResponse = false;
       }
     },

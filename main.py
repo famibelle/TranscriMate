@@ -11,8 +11,9 @@ import asyncio
 import filetype
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, Request
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
 
 from starlette.websockets import WebSocketDisconnect
 
@@ -262,17 +263,9 @@ async def upload_file(file: UploadFile = File(...)):
     file_extension = os.path.splitext(file_path)[1].lower()
     logging.info(f"Extension détectée {file_extension}.")
 
-    # audio = extract_audio(file_path)
-    
-    # if audio is not None:
-    #     print(f"Audio extrait avec succès. Durée : {len(audio) / 1000} secondes")
-    #     # Vous pouvez maintenant utiliser l'objet audio (AudioSegment) comme vous le souhaitez
-    #     # Par exemple : audio.export("sortie.mp3", format="mp3")    
-
     # Utilise les paramètres de transcription
     task = current_settings.get("transcribe")  # Prend la valeur par défaut si non définie
-    # generate_kwargs={"language": "english"}
-    # generate_kwargs={"task": "translate"})
+
 
     try:
         # Sauvegarder temporairement le fichier uploadé
@@ -289,10 +282,7 @@ async def upload_file(file: UploadFile = File(...)):
         if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
             logging.info(f"fichier audio détecté: {file_extension}.")
 
-            # Charger le fichier audio avec Pydub
-            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
             audio = AudioSegment.from_file(file_path)
-            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
 
 
         elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
@@ -300,15 +290,11 @@ async def upload_file(file: UploadFile = File(...)):
             video_clip = VideoFileClip(file_path)
             logging.info("Extraction Audio démarrée ...")
 
-            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
             logging.info(extraction_status)
-            # yield f"{extraction_status}\n"
 
             audio = AudioSegment.from_file(file_path, format=file_type.extension)
 
-            # extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
             logging.info(extraction_status)
-            # yield f"{extraction_status}\n"
 
         logging.info(f"Conversion du {file.filename} en mono 16kHz.")
         audio = audio.set_channels(1)
@@ -702,8 +688,6 @@ def process_audio_chunk(data):
     return audio_chunk
 
 
-
-
 # Fonction pour exécuter la commande `ollama run` et obtenir la réponse du modèle
 def run_chocolatine_model(prompt):
     command = [
@@ -743,64 +727,25 @@ def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     # Indique la fin du streaming
     yield "event: end\ndata: Le streaming est terminé\n\n"
 
-# Fonction pour vérifier si un buffer se termine par un caractère UTF-8 complet
-def is_valid_utf8(buffer: str) -> bool:
-    try:
-        buffer.encode('utf-8').decode('utf-8')
-        return True
-    except UnicodeDecodeError:
-        return False
 
 # Fonction pour exécuter la commande en mode streaming avec gpt4o-mini
 def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
     try:
-        # Envoyer la réponse formatée pour le streaming
-        yield "event: start\n"
-        yield "data: Le streaming a commencé\n\n"
-
-        # Création de la réponse en streaming
+        # Création de la réponse
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=prompt,
-            stream=True
+            stream=False
         )
  
-        buffer = ""
-        # Envoie chaque chunk produit par le modèle
-        for chunk in response:
-            delta = chunk.choices[0].delta.content if hasattr(chunk.choices[0].delta, 'content') else ""
-            if delta:
-                buffer += delta
-
-                # Traiter les points : si le buffer commence par un numéro suivi de '.', on considère que c'est un nouveau point de liste
-                if buffer.lstrip().startswith(tuple(f"{i}." for i in range(1, 10))) or buffer.lstrip().startswith("-"):
-                    # Ajoute une double nouvelle ligne avant chaque énumération pour mieux les séparer
-                    yield f"data: \n{buffer.strip()}\n\n"
-                    logging.debug(f"Chunk envoyé : {buffer.strip()}")
-                    buffer = ""
-                
-                # Si le buffer contient une phrase complète
-                elif buffer.endswith((".", "?", "!", "\n")):
-                    # Ajouter une double nouvelle ligne après chaque phrase complète
-                    yield f"data: {buffer.strip()}\n\n"
-                    logging.debug(f"Chunk envoyé : {buffer.strip()}")
-                    buffer = ""
-
-        # Envoie tout le contenu restant dans le buffer
-        if buffer:
-            yield f"data: {buffer.strip()}\n\n"
-            logging.debug(f"Chunk final envoyé : {buffer.strip()}")
-
-        yield "data: Streaming terminé\n\n"
-        yield "event: end\n"
-
+        logging.debug(f"Réponse complète: {response}")
+        return response
+    
     except Exception as e:
         logging.error(f"Erreur GPT: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
 
 # Route POST pour le streaming
 @app.post("/ask_question/")
@@ -823,8 +768,8 @@ Voici la demande de l'utilisateur : {data.question}
     prompt_gpt = [ 
         {"role": "system", "content": "Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation."},
         {"role": "user", "content": f"Voici la transcription de la conversation :\n\n{data.transcription}"},
-        # {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique."},
-        {"role": "assistant", "content": "Les réponses doivent être formatées en texte brut (donc sans symbole markdown) parce que l'affichage coté frontend ne gère pas le markdown, pour une lecture agréable avec des retours à la ligne fréquents.  Utilisez uniquement les informations contenues dans la transcription pour répondre"},
+        {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique."},
+        # {"role": "assistant", "content": "Les réponses doivent être formatées en texte brut (donc sans symbole markdown) parce que l'affichage coté frontend ne gère pas le markdown, pour une lecture agréable avec des retours à la ligne fréquents.  Utilisez uniquement les informations contenues dans la transcription pour répondre"},
         {"role": "user", "content": f"Voici la demande de l'utilisateur : {data.question}"},
     ]
 
@@ -843,16 +788,18 @@ Modèle utilisé: {data.chat_model}
     # Sélection du prompt et de la fonction de streaming en fonction du modèle
     if data.chat_model == "chocolatine":
         prompt = prompt_chocolatine
-        streaming_function = run_chocolatine_streaming
+        return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/plain")
+
     else:
         prompt = prompt_gpt
-        streaming_function = run_gpt4o_mini_streaming  # Remplacez par la fonction adéquate si nécessaire
+        response = run_gpt4o_mini_streaming(prompt)
 
-    try:
-        # Renvoie une réponse en streaming avec StreamingResponse
-        return StreamingResponse(streaming_function(prompt), media_type="text/plain")
-    except Exception as e:
-        # Gestion de l'erreur en cas de problème avec l'API OpenAI
-        error_message = f"Erreur lors de la communication avec le modèle {data.chat_model}: {str(e)}"
-        raise HTTPException(status_code=502, detail=error_message) 
-
+        # Récupérer le contenu de la réponse
+        full_content = response.choices[0].message.content
+        # json_response = jsonable_encoder(full_content.content)
+        
+        json_response =  {"response": full_content}
+        logging.debug(f"Réponse envoyée: {json_response}")
+        
+        return json_response
+        # return JSONResponse(content= json_response, media_type="application/json")

@@ -330,7 +330,7 @@ export default {
         task: "transcribe", // valeur par défaut
         model: "openai/whisper-large-v3-turbo",
         lang: "auto",
-        chat_model: 'chocolatine'
+        chat_model: 'gpt-4'
       },
 
       availableModels: [
