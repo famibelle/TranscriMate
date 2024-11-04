@@ -729,22 +729,45 @@ def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
 
 # Fonction pour exécuter la commande en mode streaming
 def run_chocolatine(prompt):
-    logging.debug(f"Prompt pour Chocolatine: {prompt}")
+        # Commande pour lancer le modèle
+        command = ["ollama", "run", "jpacifico/chocolatine-3b", prompt]
 
-    # Commande pour lancer le modèle
-    command = ["ollama", "run", "jpacifico/chocolatine-3b", prompt]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        # Utilisation de Popen pour capturer la sortie en temps réel
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
 
-    # Attendre que le processus se termine et récupérer stdout et stderr
-    stdout, stderr = process.communicate()
+        # Capture de la sortie en temps réel
+        output = []
+        error_output = []
 
-    # stdout contient la réponse complète en un bloc
-    if stderr:
-        logging.debug("Chocolation Error:", stderr)
-        return stderr
-    else:
-        logging.debug("Chocolation Output:", stdout)
-        return stdout
+        # Lecture de stdout
+        for line in process.stdout:
+            line = line.strip()
+            if line:
+                output.append(line)
+            
+        # Lecture de stderr
+        for line in process.stderr:
+            line = line.strip()
+            if line:
+                error_output.append(line)
+
+        # Attendre que le processus se termine
+        return_code = process.wait()
+
+        if return_code != 0:
+            error_message = '\n'.join(error_output)
+            return f"Erreur: {error_message}"
+
+        result = '\n'.join(output)
+        return result
+
 
 # Fonction pour exécuter la commande en mode streaming avec gpt4o-mini
 def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
