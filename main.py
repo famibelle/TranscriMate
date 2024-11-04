@@ -727,6 +727,24 @@ def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     # Indique la fin du streaming
     yield "event: end\ndata: Le streaming est terminé\n\n"
 
+# Fonction pour exécuter la commande en mode streaming
+def run_chocolatine(prompt):
+    logging.debug(f"Prompt pour Chocolatine: {prompt}")
+
+    # Commande pour lancer le modèle
+    command = ["ollama", "run", "jpacifico/chocolatine-3b", prompt]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    # Attendre que le processus se termine et récupérer stdout et stderr
+    stdout, stderr = process.communicate()
+
+    # stdout contient la réponse complète en un bloc
+    if stderr:
+        logging.debug("Chocolation Error:", stderr)
+        return stderr
+    else:
+        logging.debug("Chocolation Output:", stdout)
+        return stdout
 
 # Fonction pour exécuter la commande en mode streaming avec gpt4o-mini
 def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
@@ -778,21 +796,20 @@ Voici la demande de l'utilisateur : {data.question}
     else:
         prompt = prompt_gpt
 
-    logging.info(f"""
-vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-Prompt envoyé {prompt}
-Modèle utilisé: {data.chat_model}
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-""")
+    logging.debug(f"Modèle utilisé: {data.chat_model}")
     
     # Sélection du prompt et de la fonction de streaming en fonction du modèle
     if data.chat_model == "chocolatine":
-        prompt = prompt_chocolatine
-        return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/plain")
+        # return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/plain")
+        response = run_chocolatine(prompt_chocolatine)
+
+        json_response =  {"response": response}
+        logging.debug(f"Réponse envoyée: {json_response}")
+        
+        return json_response
 
     else:
-        prompt = prompt_gpt
-        response = run_gpt4o_mini_streaming(prompt)
+        response = run_gpt4o_mini_streaming(prompt_gpt)
 
         # Récupérer le contenu de la réponse
         full_content = response.choices[0].message.content

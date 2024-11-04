@@ -152,6 +152,7 @@ input {
 
 .square {
   font-weight: bold; /* Affiche le carré en gras pendant le streaming */
+  animation: pulse 1s ease-in-out infinite; /* Animation de pulsation */
 }
 
 .submit-button:hover {
@@ -173,4 +174,16 @@ input {
   outline: none;
   margin-right: 10px;
 }
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1); /* Taille initiale */
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2); /* Taille augmentée pour effet de pulsation */
+    opacity: 0.7; /* Légère transparence pour accentuer l'effet */
+  }
+}
+
 </style>
