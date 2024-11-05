@@ -565,14 +565,24 @@ async def websocket_audio_receiver(websocket: WebSocket):
 
 
                 if current_settings['task'] != "transcribe":
-                    generate_kwargs={"language": "english", "condition_on_prev_tokens": True} 
+                    generate_kwargs={
+                        "language": "english", 
+                        "condition_on_prev_tokens": True
+                        } 
+
+                    transcription_live = Transcriber_Whisper_live(
+                        temp_file.name,
+                        return_timestamps=False,
+                        generate_kwargs = generate_kwargs
+                    )
+
                 else:
                     generate_kwargs={"condition_on_prev_tokens": True} 
     
                     # Transcrire l'audio
                     transcription_live = Transcriber_Whisper_live(
                         temp_file.name,
-                        return_timestamps="word",
+                        return_timestamps=False,
                         generate_kwargs = generate_kwargs
                     )
 
