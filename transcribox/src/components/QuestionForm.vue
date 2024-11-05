@@ -1,7 +1,11 @@
 <template>
   <div>
-    <!-- Affiche la réponse en Markdown  -->
-    <div v-if="response" style="margin-bottom: 20px;">
+    <div v-if="isStreamingChatResponse && !response" style="margin-bottom: 20px;">
+      Je suis en train de réfléchir {{ currentEmoji }}
+      </div>
+      <!-- Affiche la réponse en Markdown  -->
+      <div v-else-if="response" style="margin-bottom: 20px;">
+
       <MarkdownRenderer :content="response" />
       <!-- <div>{{response}}</div> -->
       <!-- Bouton de copie avec emoji 📋 -->
@@ -48,7 +52,9 @@ export default {
     return {
       question: 'Fais une synthèse structurée',
       response: '',
-      isStreamingChatResponse: false // État pour suivre si le streaming de réponse du chat est en cours
+      isStreamingChatResponse: false, // État pour suivre si le streaming de réponse du chat est en cours
+      currentEmoji: '🤔', // Emoji initial
+      emojiInterval: null // Intervalle pour alterner les émojis
     };
   },
 
@@ -60,7 +66,35 @@ export default {
     });
   },
 
+  watch: {
+    // Surveille les changements de isStreamingChatResponse
+    isStreamingChatResponse(newValue) {
+      if (newValue) {
+        this.startEmojiAnimation();
+      } else {
+        this.stopEmojiAnimation();
+      }
+    }
+  },
+
   methods: {
+
+    startEmojiAnimation() {
+      const emojis = ['🧐', '💭', '⏳', '🔄', '🧠', '🕰️', '🔍', '🤯', '🤖', '📖', '💡', '🌀', '🔬', '🧐', '🖋️'];
+      let index = 0;
+
+      // Change d'emoji toutes les 500 ms (modifiable)
+      this.emojiInterval = setInterval(() => {
+        this.currentEmoji = emojis[index];
+        index = (index + 1) % emojis.length;
+      }, 500);
+    },
+    // Stoppe l'animation d'emoji
+    stopEmojiAnimation() {
+      clearInterval(this.emojiInterval);
+      this.emojiInterval = null;
+      this.currentEmoji = '🤔'; // Emoji par défaut lorsque l'animation s'arrête
+    },
 
     // Fonction pour copier la réponse dans le presse-papiers
     copyToClipboard() {
@@ -102,6 +136,7 @@ export default {
       } 
       catch (error) {
         console.error("Erreur lors de la récupération de la réponse :", error);
+        this.response = "J'ai buggé ...";
       } 
       finally {
         // Assure que l'état de traitement est désactivé à la fin, même en cas d'erreur

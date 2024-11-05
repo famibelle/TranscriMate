@@ -159,7 +159,7 @@
           <div class="settings-modal">
               <div>
                 <div>
-                  <CustomToggle v-model="settings.chat_model" 
+                  <!-- <CustomToggle v-model="settings.chat_model" 
                     :leftOption="{ value: 'gpt-4', label: 'GPT' }"
                     :rightOption="{ value: 'chocolatine', label: 'Chocolatine🍫🥖' }"
                     :width="300"
@@ -167,7 +167,24 @@
                     activeColor="#2196F3"
                     backgroundColor="#f0f0f0"
                     textColor="#666"                  
-                  />
+                  /> -->
+
+                  <div>
+                    <label class="switch">
+                      <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
+                      <span class="slider"></span>
+                    </label>       <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
+
+
+                  </div>
+                  
+                  <div>
+                    <label class="switch">
+                      <input type="checkbox" :checked="settings.chat_model === 'chocolatine'" @change="toggleModel">
+                      <span class="slider"></span>
+                    </label> <span :class="{ bold: settings.chat_model === 'chocolatine'}">Chocolatine🍫🥖</span>
+
+                  </div>
                 </div>
               </div>
               <div>
@@ -234,6 +251,7 @@
             <li><strong>Ajoutez un fichier:</strong> 📂glissez-déposez un fichier audio ou vidéo dans l’espace ci-dessus.</li>
             <li><strong>Traitement automatique:</strong> notre technologie d'IA extrait la bande son 📞, distingue chaque voix 👥 et crée une transcription complète, organisée par intervenant.</li>
             <li><strong>Copiez la transcription:</strong> obtenez un document textuel clair et structuré, prêt à être copié 📋 et utilisé où vous le souhaitez.</li>
+            <li><strong>Chatbot:</strong>Demander à l'AI 🤖 d'en faire une synthèse</li>
           </ol>
 
         </div>
@@ -255,41 +273,34 @@
           <div class="settings-modal">
               <div>
                 <div>
-                  <CustomToggle  v-model="settings.task" 
-                    :leftOption="{ value: 'transcribe', label: 'Transcribe' }"
-                    :rightOption="{ value: 'translate', label: 'Translate' }"
-                    :width="200"
-                    :height="40"
-                    activeColor="#2196F3"
-                    backgroundColor="#f0f0f0"
-                    textColor="#666"
-                  />
+
+                  <div>
+                    <label class="switch">
+                      <input type="checkbox" :checked="settings.task === 'transcribe'" @change="toggleTask">
+                      <span class="slider"></span>
+                    </label>       <span :class="{ bold: settings.task === 'transcribe' }">Transcribe</span>
+
+                  </div>
+
+                  <div>
+                    <label class="switch">
+                      <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
+                      <span class="slider"></span>
+                    </label>        <span :class="{ bold: settings.task === 'translate' }">Translate</span>
+                  </div>
                 </div>
 
-                <div>
-                  <v-container
-                    class="px-0"
-                    fluid
-                  >
-                    <v-switch
-                      v-model="switch1"
-                      :label="`Switch 1: ${switch1.toString()}`"
-                    ></v-switch>
-                  </v-container>
-                </div>
+
 
 
               </div>
               <div>
-                <!-- <label>Model:</label>
-                <select v-model="settings.model">
-                  <option v-for="model in availableModels" :value="model">{{ model }}</option>
-                </select> -->
               </div>
               <div>
               </div>
-              <!-- <button @click="saveSettings">Save</button>
-              <button @click="closeSettings">Close</button> -->
+            
+            
+            
             </div>
           </div>
         </div>
@@ -310,7 +321,8 @@ export default {
   components: {
     // TaskToggle,
     CustomToggle,
-    QuestionForm
+    QuestionForm,
+    
   },
 
   watch: {
@@ -412,123 +424,20 @@ export default {
   },
 
   methods: {
+    toggleTask() {
+        // Basculer entre "translate" et "transcribe" en fonction de l'état du switch
+        this.settings.task = this.settings.task === 'translate' ? 'transcribe' : 'translate';
+      },
+
+      toggleModel() {
+        // Basculer entre "translate" et "transcribe" en fonction de l'état du switch
+        this.settings.chat_model = this.settings.chat_model === 'gpt-4' ? 'chocolatine' : 'gpt-4';
+      },
+
+
     onToggleChange(newValue) {
       console.log('Statut du toggle changé à :', newValue);
     },
-
-
-    // async toggleRecording() {
-    //   if (!this.isRecording) {
-    //     try {
-    //       this.stream = await navigator.mediaDevices.getUserMedia({ 
-    //         audio: {
-    //           echoCancellation: true,
-    //           noiseSuppression: true,
-    //           autoGainControl: true
-    //         }
-    //       });
-
-    //     // Initier WebSocket
-    //     // this.socket = new WebSocket("wss://localhost:8000/streaming_audio");
-    //     // this.socket = new WebSocket(`${process.env.VUE_APP_WEBSOCKET_URL}/streaming_audio`);
-    //     console.log("WebSocket URL:", process.env.VUE_APP_WEBSOCKET_URL);
-    //     this.socket = new WebSocket(process.env.VUE_APP_WEBSOCKET_URL);
-
-    //     this.socket.onopen = () => {
-    //       console.log("WebSocket connection opened");
-    //     };
-
-    //     this.socket.onmessage = (event) => {
-    //       try {
-    //         // Parse the incoming JSON message
-    //         const message = JSON.parse(event.data);
-
-    //         if (message.chunk_duration !== undefined) {
-    //           console.log("Chunk duration received:", message.chunk_duration, "seconds");
-    //           // You can now use chunk_duration as needed in your Vue.js app
-    //           // For example, update a component data property
-    //           this.chunkDuration = message.chunk_duration;
-    //         }
-
-    //         if (message.transcription_live !== undefined) {
-    //           console.log("Transcription received:", message.transcription_live);
-    //           this.transcriptionLive = message.transcription_live;
-    //         }
-
-    //       } catch (error) {
-    //         console.error("Erreur, je n'ai pas réussi à parser le message:", error);
-    //       }
-    //     };
-
-    //     this.socket.onerror = (error) => {
-    //       console.error("WebSocket error:", error);
-    //     };
-
-    //     // Initialiser MediaRecorder avec le flux audio
-    //     this.mediaRecorder = new MediaRecorder(this.stream);
-
-    //     // Configuration de l'événement ondataavailable pour envoyer les chunks en temps réel
-    //     this.mediaRecorder.ondataavailable = (event) => {
-    //         this.audioChunks.push(event.data);
-    //         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-    //         this.socket.send(event.data); // Envoyer le chunk de données au serveur
-    //       }
-    //     };
-
-    //     // Gestion de l'arrêt de l'enregistrement
-    //     this.mediaRecorder.onstop = async () => {
-    //         // Utiliser le temps d'enregistrement comme durée
-    //         // this.audioDuration = Date.now() - this.startTime; // Durée totale de l'enregistrement
-    //         this.audioDuration = this.recordingTime;
-            
-    //         const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
-    //         const audioFile = new File([audioBlob], 'recording.wav', { 
-    //           type: 'audio/wav',
-    //           lastModified: Date.now()
-    //         });
-            
-    //         // Ajouter la durée aux métadonnées du fichier
-    //         Object.defineProperty(audioFile, 'duration', {
-    //           value: this.recordingTime,
-    //           writable: false
-    //         });
-
-    //         this.handleRecordedAudio(audioFile);
-    //       };
-
-    //       // Fermer la connexion WebSocket
-    //       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-    //         this.socket.close(); // Fermer la connexion WebSocket après le traitement
-    //       }
-
-    //       // Réinitialiser les variables
-    //       this.audioChunks = [];
-    //       this.recordingTime = 0;
-          
-    //       // Démarrer l'enregistrement, en envoyant des chunks toutes les 5 secondes
-    //       this.mediaRecorder.start(5000); // Lancer l'enregistrement, envoyant des chunks toutes les 2s
-    //       console.log("Type MIME de MediaRecorder:", this.mediaRecorder.mimeType);
-
-    //       this.isRecording = true;
-    //       this.startTime = Date.now();
-    //       this.startTimer();  // Démarre un timer (si besoin, pour afficher la durée)
-          
-    //     } catch (err) {
-    //       console.error('Erreur lors de l\'accès au microphone:', err);
-    //       alert('Impossible d\'accéder au microphone. Veuillez vérifier les permissions.');
-    //     }
-    //   } else {
-    //     // Arrêt de l'enregistrement
-    //     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-    //       this.mediaRecorder.stop();
-    //     }
-    //     if (this.stream) {
-    //       this.stream.getTracks().forEach(track => track.stop());
-    //     }
-    //     this.isRecording = false;
-    //     this.stopTimer();
-    //   }
-    // },    
 
     async toggleRecording() {
       if (!this.isRecording) {
@@ -762,7 +671,6 @@ export default {
       }
     },
 
-
     startTimer() {
       this.timerInterval = setInterval(() => {
         // Calculer le temps écoulé en secondes
@@ -786,8 +694,8 @@ export default {
     },
 
     beforeDestroy() {
-    this.stopTimer();
-    if (this.stream) {
+      this.stopTimer();
+     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
     }
   },
@@ -1459,8 +1367,9 @@ button:hover {
 .chunk::after {
   content: "🖱️ Clic pour écouter";
   position: absolute;
-  top: -120%; /* Positionne l'infobulle juste au-dessus du chunk */
-  left: 50%;
+  top: +120%; /* Positionne l'infobulle juste au-dessous du chunk */
+  /* left: 50%; */
+  right: 50%;
   transform: translateX(-50%);
   background-color: #333;
   color: #fff;
@@ -2372,5 +2281,81 @@ ul {
   margin-top: 1rem;
   font-size: 1.2rem;
   color: #ff4444;
+}
+
+.switch input
+{
+  display: none;
+}
+
+.switch 
+{
+  display: inline-block;
+  width: 60px; /*=w*/
+  height: 30px; /*=h*/
+  margin: 4px;
+  transform: translateY(50%);
+  position: relative;
+  margin-bottom: 8px; /* Ajustez la valeur pour augmenter l'espace sous le bouton */
+
+}
+
+.slider
+{
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 30px;
+  box-shadow: 0 0 0 2px #777, 0 0 4px #777;
+  cursor: pointer;
+  border: 4px solid transparent;
+  overflow: hidden;
+  transition: 0.2s;
+}
+
+.slider:before
+{
+  position: absolute;
+  content: "";
+  width: 100%;
+  height: 100%;
+  background-color: #777;
+  border-radius: 30px;
+  transform: translateX(-30px); /*translateX(-(w-h))*/
+  transition: 0.2s;
+}
+
+input:checked + .slider:before
+{
+  transform: translateX(30px); /*translateX(w-h)*/
+  background-color: limeGreen;
+}
+
+input:checked + .slider
+{
+  box-shadow: 0 0 0 2px limeGreen, 0 0 8px limeGreen;
+}
+
+.switch200 .slider:before
+{
+  width: 200%;
+  transform: translateX(-82px); /*translateX(-(w-h))*/
+}
+
+.switch200 input:checked + .slider:before
+{
+  background-color: red;
+}
+
+.switch200 input:checked + .slider
+{
+  box-shadow: 0 0 0 2px red, 0 0 8px red;
+}
+
+/* Classe pour le texte en gras */
+.bold {
+  font-weight: bold;
 }
 </style>
