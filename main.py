@@ -3,7 +3,7 @@ from rich.progress import Progress
 from silero_vad import get_speech_timestamps
 from audio_denoiser.AudioDenoiser import AudioDenoiser
 import subprocess
-from typing import Generator
+from typing import Generator, Tuple
 
 import numpy as np
 import asyncio
@@ -706,6 +706,27 @@ class QuestionWithTranscription(BaseModel):
     transcription: str
     chat_model: str
 
+def stream_output(process: subprocess.Popen) -> Generator[Tuple[str, str], None, None]:
+    """
+    Génère la sortie du processus en temps réel.
+    Retourne des tuples (type, line) où type est 'stdout' ou 'stderr'
+    """
+    while True:
+        # Lecture de stdout
+        stdout_line = process.stdout.readline() if process.stdout else ''
+        if stdout_line:
+            yield 'stdout', stdout_line.strip()
+        
+        # Lecture de stderr
+        stderr_line = process.stderr.readline() if process.stderr else ''
+        if stderr_line:
+            yield 'stderr', stderr_line.strip()
+        
+        # Vérification si le processus est terminé
+        if process.poll() is not None and not stdout_line and not stderr_line:
+            break
+
+
 # Fonction pour exécuter la commande en mode streaming
 def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     # Indique le début du streaming
@@ -727,46 +748,32 @@ def run_chocolatine_streaming(prompt: str) -> Generator[str, None, None]:
     # Indique la fin du streaming
     yield "event: end\ndata: Le streaming est terminé\n\n"
 
-# Fonction pour exécuter la commande en mode streaming
-def run_chocolatine(prompt):
+# Fonction pour exécuter la commande
+def run_chocolatine(prompt: str) -> str:
+    """Version synchrone optimisée de run_chocolatine"""
+    logging.debug(f"Démarrage run_chocolatine avec prompt: {prompt}")
+    
+    try:
         # Commande pour lancer le modèle
         command = ["ollama", "run", "jpacifico/chocolatine-3b", prompt]
-
-        # Utilisation de Popen pour capturer la sortie en temps réel
-        process = subprocess.Popen(
+        
+        # Utilisation de check_output pour une capture simple et fiable
+        result = subprocess.check_output(
             command,
-            stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1,
             universal_newlines=True
         )
+        
+        logging.debug(f"Résultat brut reçu: {result}")
+        return result.strip()
 
-        # Capture de la sortie en temps réel
-        output = []
-        error_output = []
-
-        # Lecture de stdout
-        for line in process.stdout:
-            line = line.strip()
-            if line:
-                output.append(line)
-            
-        # Lecture de stderr
-        for line in process.stderr:
-            line = line.strip()
-            if line:
-                error_output.append(line)
-
-        # Attendre que le processus se termine
-        return_code = process.wait()
-
-        if return_code != 0:
-            error_message = '\n'.join(error_output)
-            return f"Erreur: {error_message}"
-
-        result = '\n'.join(output)
-        return result
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Erreur lors de l'exécution: {e.stderr}")
+        raise HTTPException(status_code=500, detail=str(e.stderr))
+    except Exception as e:
+        logging.error(f"Erreur inattendue: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Fonction pour exécuter la commande en mode streaming avec gpt4o-mini
@@ -793,10 +800,10 @@ def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
 async def ask_question(data: QuestionWithTranscription):
     # Crée le prompt pour le modèle à partir de la question et de la transcription
     prompt_chocolatine = f""" 
-Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation.
+Vous êtes un assistant qui répond aux questions et demandes basées sur une transcription de conversation.
 
-Voici les instructions à suivre pour la réponse:
-    les extraits pris dans la conversation seront entre guillements,
+Voici les instructions à suivre pour la réponse à apporter à la demande:
+    les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en *italique*
     la réponse doit être inférieure à 500 mots
     utilisez uniquement les informations contenues dans la transcription pour répondre.
 
@@ -809,21 +816,18 @@ Voici la demande de l'utilisateur : {data.question}
     prompt_gpt = [ 
         {"role": "system", "content": "Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation."},
         {"role": "user", "content": f"Voici la transcription de la conversation :\n\n{data.transcription}"},
-        {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en italique."},
+        {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en *italique*."},
         # {"role": "assistant", "content": "Les réponses doivent être formatées en texte brut (donc sans symbole markdown) parce que l'affichage coté frontend ne gère pas le markdown, pour une lecture agréable avec des retours à la ligne fréquents.  Utilisez uniquement les informations contenues dans la transcription pour répondre"},
         {"role": "user", "content": f"Voici la demande de l'utilisateur : {data.question}"},
     ]
-
-    if  data.chat_model == "chocolatine":
-        prompt = prompt_chocolatine
-    else:
-        prompt = prompt_gpt
 
     logging.debug(f"Modèle utilisé: {data.chat_model}")
     
     # Sélection du prompt et de la fonction de streaming en fonction du modèle
     if data.chat_model == "chocolatine":
         # return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/plain")
+        logging.debug(f"Prompt envoyé à {data.chat_model}: {prompt_chocolatine}")
+
         response = run_chocolatine(prompt_chocolatine)
 
         json_response =  {"response": response}

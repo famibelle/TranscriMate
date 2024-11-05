@@ -265,6 +265,20 @@
                     textColor="#666"
                   />
                 </div>
+
+                <div>
+                  <v-container
+                    class="px-0"
+                    fluid
+                  >
+                    <v-switch
+                      v-model="switch1"
+                      :label="`Switch 1: ${switch1.toString()}`"
+                    ></v-switch>
+                  </v-container>
+                </div>
+
+
               </div>
               <div>
                 <!-- <label>Model:</label>
@@ -291,6 +305,7 @@ import CustomToggle from './components/CustomToggle.vue'
 import QuestionForm from './components/QuestionForm.vue'
 
 
+
 export default {
   components: {
     // TaskToggle,
@@ -310,6 +325,8 @@ export default {
   },
   data() {
     return {
+
+      switch1: true,
 
       transcriptionLive: { "text": "", "chunks": [ { "text": "", "timestamp": [ 0, 0.1 ] }] },
 
@@ -395,6 +412,11 @@ export default {
   },
 
   methods: {
+    onToggleChange(newValue) {
+      console.log('Statut du toggle changé à :', newValue);
+    },
+
+
     // async toggleRecording() {
     //   if (!this.isRecording) {
     //     try {
