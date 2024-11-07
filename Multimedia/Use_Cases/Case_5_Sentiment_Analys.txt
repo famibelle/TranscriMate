@@ -1,0 +1,64 @@
+### Sentiment Analysis for Inclusion & Diversity Surveys at AXA
+
+#### Contexte Stratégique
+
+AXA mène chaque année des enquêtes pour évaluer l'inclusion et la diversité sur le lieu de travail, avec un accent particulier sur l'identification des comportements non inclusifs. En 2024, **66 000 employés d'AXA** dans le monde ont participé à cette enquête, générant **15 000 réponses libres** (verbatim). Ces données permettent à l'équipe RH d'inclusion et de diversité (I&D) de mieux comprendre les expériences de discrimination, notamment en termes de racisme, de sexisme, et d'autres formes d'exclusion, en vue d'extraire des points de douleur critiques et des directives damélioration basées sur les retours des employés.
+
+---
+
+#### Objectif : Optimiser l'Analyse des Verbatims pour une Prise de Décision Éclairée
+
+Le but de ce projet est de déployer une solution sécurisée d'analyse des sentiments qui utilise des modèles de langage (LLM) pour traiter efficacement les verbatims. L'objectif est de fournir aux équipes RH des informations exploitables sur les tendances en matière de diversité et d'inclusion, tout en respectant la confidentialité des réponses des employés. La solution permet de catégoriser les thèmes de discrimination, de détecter les sentiments associés, et didentifier de nouvelles thématiques émergentes en matière de I&D.
+
+#### Enjeux : Confidentialité des Données et Délais de Traitement
+
+Les réponses libres contiennent souvent des informations sensibles, et une manipulation inadéquate pourrait exposer des données confidentielles. De plus, l'analyse manuelle de ces réponses est longue, même avec des outils de recherche par mots-clés, ce qui prend généralement plusieurs jours. Parmi les principaux défis :
+- **Erreurs humaines** : Les risques de divulgation accidentelle dinformations sensibles augmentent lors de la manipulation des données.
+- **Délais serrés** : AXA doit analyser les 15 000 verbatims dans des délais très courts.
+- **Confidentialité absolue** : L'analyse des verbatims doit se faire en garantissant que la confidentialité des réponses est respectée, en particulier lorsqu'il s'agit de sujets aussi délicats.
+
+---
+
+#### Solution : Analyse des Verbatims avec des Modèles de Langage Sécurisés
+
+AKABI a mis en place une stratégie basée sur des modèles de langage sécurisés pour traiter les verbatims efficacement. La solution comprend plusieurs étapes :
+- **Thématisation et analyse des sentiments** : GPT-4o est utilisé pour classer les verbatims selon les thèmes (types de discrimination) et les sentiments. Le modèle identifie automatiquement les thématiques émergentes en I&D grâce au topic modeling.
+- **Sécurité par conception** : La solution utilise les LLM internes d'AXA via Secure GPT, ce qui minimise les risques de fuite de données.
+- **Processus de validation humaine** : Des spécialistes de l'inclusion et de la diversité sont impliqués dans la revue des résultats générés par le modèle pour affiner les prompts et valider les analyses.
+- **Génération de rapports et statistiques** : La solution produit des statistiques par thème et sentiment, permettant une vue d'ensemble des tendances dans les réponses des employés.
+
+#### Technologie et Infrastructure
+
+Pour garantir une analyse sécurisée et efficace, la solution repose sur une stack technologique avancée, comprenant :
+- **Python et JupyterLab** pour le développement de scripts et l'analyse des données.
+- **LLM (Modèles de Langage de Grande Taille)** : Utilisés pour lanalyse sémantique et la classification des thèmes des verbatims.
+- **Sécurité** : La solution est intégrée à l'infrastructure Secure GPT d'AXA pour assurer la confidentialité des données sensibles.
+
+---
+
+#### Résultats Attendus : Efficacité, Engagement et Décisions Éclairées
+
+Grâce à cette solution, AXA vise à obtenir plusieurs avantages significatifs :
+- **Réduction du temps d'analyse** : Le temps nécessaire pour analyser les verbatims est réduit de plusieurs jours à quelques heures, tout en préservant la confidentialité.
+- **Engagement renforcé des employés** : En identifiant les biais et les tendances dans les réponses, l'outil permet des améliorations proactives de lenvironnement de travail, augmentant ainsi la rétention des talents.
+- **Prise de décision informée** : La solution fournit des analyses prédictives, permettant aux équipes RH danticiper les besoins futurs en matière de diversité et inclusion, et de prendre des décisions plus rapides et basées sur les données.
+- **Optimisation des processus RH** : En automatisant l'analyse des enquêtes, les ressources RH peuvent se concentrer sur des tâches stratégiques et réduire les biais dans les processus de recrutement pour favoriser la diversité.
+
+#### Impacts Stratégiques
+
+- **98 %** : Taux de verbatims correctement traduits en anglais par le modèle pour le traitement.
+- **99 %** : Précision de la détection des thèmes d'inclusion et de diversité.
+- **Impact Culturel** : Les insights générés par loutil soutiennent la promotion d'une culture inclusive, alignant les pratiques de l'entreprise sur ses objectifs en matière de diversité, équité, et inclusion (DEI), et renforçant ainsi lattractivité de lentreprise en tant quemployeur.
+
+---
+
+#### Ressources Humaines et Organisation
+
+Limplémentation de cette solution danalyse de sentiments implique une équipe spécialisée :
+- **1 Data Scientist Médior** sur une durée de 4 mois.
+
+---
+
+### Conclusion
+
+Le projet "Sentiment Analysis for Inclusion & Diversity Surveys" permet à AXA de traiter efficacement un volume important de verbatims tout en assurant la confidentialité des données. En automatisant le processus d'analyse des enquêtes I&D, AXA est en mesure d'identifier rapidement les comportements non inclusifs, de prendre des mesures proactives pour améliorer lenvironnement de travail, et de renforcer son positionnement en tant qu'employeur inclusif. La solution d'AKABI garantit que les décisions en matière de diversité et inclusion sont basées sur des données fiables et actuelles, ce qui permet à AXA de répondre aux besoins évolutifs de ses employés et de promouvoir une culture d'inclusion.

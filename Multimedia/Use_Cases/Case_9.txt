@@ -1,0 +1,61 @@
+### Ambulance Handover Delay Prediction for Keolis Santé
+
+#### Contexte Stratégique
+
+Keolis Santé, un acteur clé du transport de patients vers les hôpitaux, fait face à des retards fréquents lors des transferts de patients, dus aux inefficacités dans les processus d'accueil hospitalier. Ces retards impactent non seulement la disponibilité des véhicules, mais posent également des risques pour les patients, notamment en retardant laccès aux soins critiques. Ce projet vise à optimiser les transferts en anticipant les délais de prise en charge pour réduire les temps dattente des ambulances et améliorer la qualité des soins.
+
+---
+
+#### Objectif : Prédire les Retards de Transfert et Optimiser l'Efficacité Opérationnelle
+
+Lobjectif principal est de développer un modèle de machine learning capable de prédire les retards lors des transferts de patients entre les ambulances et les hôpitaux, en prenant en compte divers facteurs tels que la saisonnalité et la capacité hospitalière. En anticipant ces délais, Keolis Santé peut mieux planifier ses opérations, maximiser l'utilisation des véhicules, et réduire les risques pour les patients en améliorant la fluidité des transferts.
+
+#### Enjeux : Risques pour les Patients et Inefficacités Opérationnelles
+
+Les retards de transfert peuvent entraîner :
+- **Risques accrus pour les patients** : Les délais dans la prise en charge peuvent exacerber les conditions de santé et augmenter le risque de complications.
+- **Inefficacités opérationnelles** : Sans un système prédictif, les hôpitaux peuvent subir des goulets d'étranglement et une surcharge de travail, entraînant des délais pour les autres patients et une pression accrue sur le personnel de santé.
+
+---
+
+#### Solution : Modèle de Prédiction des Retards Basé sur le Machine Learning
+
+AKABI a développé un Proof of Concept (PoC) pour un outil de prédiction des retards de transfert, intégrant des données historiques des trajets dambulance afin de prédire les délais de prise en charge. La solution repose sur plusieurs éléments clés :
+- **Modèle de machine learning avec MAE de 5 minutes** : Ce modèle permet une précision de prédiction avec un intervalle de 10 minutes pour les retards de transfert.
+- **Données enrichies** : Intégration de données externes comme celles dOpenWeather et de lAPI Waze pour affiner les prédictions en prenant en compte des variables environnementales et routières.
+- **Évolutivité** : Le modèle est conçu pour apprendre de multiples hôpitaux et peut être amélioré en intégrant des informations supplémentaires, telles que les détails du personnel ambulancier et le flux des patients.
+
+#### Technologie et Infrastructure
+
+La solution repose sur une infrastructure technique performante et sécurisée, avec les outils suivants :
+- **Modèles ML** : Utilisation de modèles comme Random Forest et XGBoost, développés via Azure AutoML pour loptimisation des prédictions.
+- **Environnement backend** : Azure SQL pour le stockage des données, Django pour la gestion de l'application, et scikit-learn pour le développement et le déploiement des modèles.
+- **Intégration de données externes** : OpenWeather pour les données météorologiques et l'API de routage Waze pour les informations de trafic en temps réel.
+
+---
+
+#### Résultats Attendus : Amélioration des Soins et Réduction des Coûts
+
+La solution d'AKABI pour la prédiction des retards de transfert permet à Keolis Santé de bénéficier des avantages suivants :
+- **Optimisation des ressources hospitalières** : Réduction des temps d'attente pour les soins spécialisés, augmentant l'efficacité opérationnelle des hôpitaux.
+- **Amélioration du flux des patients** : Accroissement de la capacité hospitalière et satisfaction des patients grâce à une meilleure gestion des transferts.
+- **Réduction des coûts** : En anticipant les besoins en soins, les hôpitaux peuvent diminuer la durée moyenne des séjours et libérer des ressources pour d'autres patients.
+
+#### Impact Stratégique
+
+- **10 minutes** : Précision de lintervalle de prédiction des retards.
+- **Réduction des coûts** : Utilisation de l'IA pour optimiser les transferts et libérer des ressources hospitalières.
+- **Amélioration de l'expérience patient** : En réduisant les temps d'attente pour les soins critiques, la solution contribue à des résultats de santé optimisés.
+
+---
+
+#### Ressources Humaines et Organisation
+
+L'implémentation de cette solution a mobilisé une équipe spécialisée :
+- **1 Data Scientist Junior** (2 mois)
+
+---
+
+### Conclusion
+
+Le projet "Ambulance Handover Delay Prediction" d'AKABI pour Keolis Santé optimise les opérations de transfert de patients en anticipant les retards. Grâce à un modèle de machine learning précis et à une intégration de données externes, cette solution réduit les risques pour les patients, améliore lefficacité opérationnelle et diminue les coûts associés aux transferts hospitaliers. Keolis Santé est ainsi positionné comme un acteur innovant dans le secteur de la santé, en utilisant l'IA pour relever les défis des soins d'urgence et améliorer la satisfaction des patients.

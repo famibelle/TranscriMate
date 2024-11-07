@@ -17,6 +17,8 @@ from fastapi.encoders import jsonable_encoder
 
 from starlette.websockets import WebSocketDisconnect
 
+from RAG import load_embedding_model, load_text_files, create_faiss_index, setup_rag_pipeline, search_in_index
+
 import io
 
 import filetype
@@ -846,7 +848,21 @@ Voici la demande de l'utilisateur : {data.question}
         return json_response
 
     else:
-        response = run_gpt4o_mini_streaming(prompt_gpt)
+
+        if "AKABI" in (data.question).upper():  # pour ignorer la casse
+            embedding_model, use_cases, use_case_files, index = setup_rag_pipeline()
+            question_embedding = embedding_model.encode(data.question).astype("float32")
+            # Recherche dans l'index FAISS
+            _, indices = index.search(question_embedding.reshape(1, -1), k=3)
+            relevant_texts = [use_cases[i] for i in indices[0]]
+            
+            # Préparer le contexte pour la réponse GPT
+            context = " ".join(relevant_texts)
+            prompt_gpt.append({"role": "system", "content": f"Voici des cas d'usage réalisé chez AKABI: {context}"})
+            response = run_gpt4o_mini_streaming(prompt_gpt)
+
+        else:
+            response = run_gpt4o_mini_streaming(prompt_gpt)
 
         # Récupérer le contenu de la réponse
         full_content = response.choices[0].message.content
@@ -857,3 +873,4 @@ Voici la demande de l'utilisateur : {data.question}
         
         return json_response
         # return JSONResponse(content= json_response, media_type="application/json")
+
