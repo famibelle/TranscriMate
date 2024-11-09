@@ -321,10 +321,31 @@
 
                 <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
                 <div class="stats-container">
-          <div class="stats-header">🚀 Comment ça marche ?</div>
-
+          <div class="stats-header">🧩 Comment ça marche ?</div>
           <ol>
-            <li><strong>Chatbot:</strong>Demandez à AKAbot 🤖 comment AKABI peut vous aider dans vos projets d'IA </li>
+            <li><strong>Chatbot: </strong>Demandez à AKAbot 🤖 comment AKABI peut vous aider dans vos projets d'IA </li>
+            <li>
+      <strong>Posez une question: </strong>Demandez à AKABot de l'aide sur vos projets IA en lui posant des questions spécifiques.
+      <em>Exemples de questions:</em>
+      <ul>
+        <li>"Quels sont les cas d'usage d'AKABI en IA ?"</li>
+        <li>"Comment AKABI peut m'aider avec des solutions de RAG ?"</li>
+      </ul>
+    </li>
+
+    <li>
+      <strong>Interaction guidée: </strong>Si vous ne savez pas par où commencer, essayez une question générale, comme "Que propose AKABI dans le domaine de la prédiction ?".<br>
+      AKABot vous orientera vers les solutions IA les plus adaptées.
+    </li>
+
+    <li>
+      <strong>Recevez des réponses précises: </strong>AKABot est alimenté par les use cases d'AKABI, donc chaque réponse est basée sur des applications concrètes et des projets réels.<br>
+      Vous obtiendrez des informations détaillées sur la manière dont AKABI aborde les problématiques courantes en IA, que ce soit en traitement de données, en génération de langage, ou en automatisation.
+    </li>
+
+    <li>
+      <strong>Demandez des conseils personnalisés: </strong>Besoin d’une solution sur mesure ? Posez des questions spécifiques à votre secteur pour recevoir des recommandations d'AKABot sur les solutions IA pertinentes pour vous.
+    </li>            
           </ol>
 
         </div>
