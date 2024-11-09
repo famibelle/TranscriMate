@@ -1,6 +1,30 @@
 <template>
   <div :class="{ dark: isDarkMode }">
     <div id="app" class="page-container">
+
+      <div class="tabs-container">
+        <div class="tabs-header">
+      <button 
+        @click="activeTab = 'tab1'" 
+        :class="['tab-button', { active: activeTab === 'tab1' }]"
+      >
+      <span class="tab-title">Trancriptor 🎙️</span>
+      
+      </button>
+      <button 
+        @click="activeTab = 'tab2'" 
+        :class="['tab-button', { active: activeTab === 'tab2' }]"
+      >
+      <span class="tab-title">AKABot 🤖</span>
+  
+      
+      </button>
+    </div>
+
+    <div class="tab-content">
+
+    <!-- Contenu du premier onglet -->
+    <div v-if="activeTab === 'tab1'">
       <!-- Vue principale affichée après l'upload du fichier -->
       <div v-if="file">
         <!-- Section fichier -->
@@ -159,48 +183,27 @@
           <div class="settings-modal">
               <div>
                 <div>
-                  <!-- <CustomToggle v-model="settings.chat_model" 
-                    :leftOption="{ value: 'gpt-4', label: 'GPT' }"
-                    :rightOption="{ value: 'chocolatine', label: 'Chocolatine🍫🥖' }"
-                    :width="300"
-                    :height="40"
-                    activeColor="#2196F3"
-                    backgroundColor="#f0f0f0"
-                    textColor="#666"                  
-                  /> -->
-
                   <div>
                     <label class="switch">
                       <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
                       <span class="slider"></span>
                     </label>       <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
-
-
-                  </div>
-                  
+                  </div>                 
                   <div>
                     <label class="switch">
                       <input type="checkbox" :checked="settings.chat_model === 'chocolatine'" @change="toggleModel">
                       <span class="slider"></span>
                     </label> <span :class="{ bold: settings.chat_model === 'chocolatine'}">Chocolatine🍫🥖</span>
-
                   </div>
                 </div>
               </div>
               <div>
-                <!-- <label>Model:</label>
-                <select v-model="settings.model">
-                  <option v-for="model in availableModels" :value="model">{{ model }}</option>
-                </select> -->
               </div>
               <div>
               </div>
-              <!-- <button @click="saveSettings">Save</button>
-              <button @click="closeSettings">Close</button> -->
             </div>
-          </div>
-       
-      </div>
+          </div>       
+        </div>
 
       <!-- Interface d'upload si aucun fichier n'est sélectionné -->
       <div v-else class="upload-container">
@@ -289,22 +292,78 @@
                     </label>        <span :class="{ bold: settings.task === 'translate' }">Translate</span>
                   </div>
                 </div>
-
-
-
-
               </div>
               <div>
               </div>
               <div>
               </div>
-            
-            
-            
             </div>
           </div>
         </div>
       </div>
+
+      <div v-if="activeTab === 'tab2'">
+
+        <div id="app" class="page-container">
+
+        <div class="stats-container">
+          <div class="stats-header">🤖 AKAbot</div>
+        <div class="stats-body"></div>
+        <div id="app">
+            <QuestionForm 
+              :defaultQuestion="'Que fait AKABI en IA?'"
+              :fullTranscription="fullTranscription"
+              :chat_model="settings.chat_model"
+            />
+          </div>
+        </div>
+
+
+                <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
+                <div class="stats-container">
+          <div class="stats-header">🚀 Comment ça marche ?</div>
+
+          <ol>
+            <li><strong>Chatbot:</strong>Demandez à AKAbot 🤖 comment AKABI peut vous aider dans vos projets d'IA </li>
+          </ol>
+
+        </div>
+        <!-- Paramètre -->
+        <div class="stats-container">
+          <div class="stats-header">⚙️ Paramètres du Chatbot</div>
+          <div class="settings-group">
+            </div>
+          <!-- Fenêtre modale pour les paramètres de transcription -->
+          <div class="settings-modal">
+              <div>
+                <div>
+                  <div>
+                    <label class="switch">
+                      <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
+                      <span class="slider"></span>
+                    </label>       <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
+                  </div>                 
+                  <div>
+                    <label class="switch">
+                      <input type="checkbox" :checked="settings.chat_model === 'chocolatine'" @change="toggleModel">
+                      <span class="slider"></span>
+                    </label> <span :class="{ bold: settings.chat_model === 'chocolatine'}">Chocolatine🍫🥖</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+              </div>
+              <div>
+              </div>
+            </div>
+          </div>       
+        </div>
+        
+      </div>
+      </div>
+</div>
+
+    </div>
     </div>
 </template>
 
@@ -337,6 +396,9 @@ export default {
   },
   data() {
     return {
+
+      activeTab: 'tab1', // Par défaut, l'onglet actif est le premier
+
 
       switch1: true,
 
@@ -2358,4 +2420,91 @@ input:checked + .slider
 .bold {
   font-weight: bold;
 }
+
+/* Style pour les onglets verticaux */
+.vertical-tabs {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0;
+  top: 0;
+  padding: 10px;
+  background-color: #f0f0f0;
+  height: 100vh;
+}
+
+.vertical-tabs button {
+  padding: 10px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 5px 0 0 5px;
+  transition: background-color 0.3s;
+}
+
+.vertical-tabs button:hover {
+  background-color: #45a049;
+}
+
+.vertical-tabs .active {
+  font-weight: bold;
+  background-color: #388e3c;
+}
+
+.tab-content {
+  padding: 8px;  /* Réduit de 16px à 8px */
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  flex: 1;
+}
+
+.tabs-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs-header {
+  display: inline-flex;  /* Pour que les onglets ne prennent que l'espace nécessaire */
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tab-button {
+  padding: 6px 12px;
+  font-size: 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  margin-bottom: -1px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  color: #666;
+}
+
+.tab-button:hover {
+  color: #333;
+}
+
+.tab-button.active {
+  background: white;
+  border-color: #e2e8f0;
+  border-bottom: 1px solid white;
+  color: #000;
+}
+
+.tab-title {
+  font-weight: bold;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+
+.tab-content {
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  flex: 1;
+}
+
 </style>

@@ -40,16 +40,24 @@ import time
 
 import tqdm
 import logging
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 import sys
 from pydantic import BaseModel, StrictStr, StrictBool
 
 from dotenv import load_dotenv
+
 import torch
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
+logging.info(f"TF32 matmul: {torch.backends.cuda.matmul.allow_tf32}")
+logging.info(f"TF32 cuDNN: {torch.backends.cudnn.allow_tf32}")
+
 from moviepy.editor import *
 from pydub import AudioSegment
 from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -108,6 +116,9 @@ def load_pipeline_diarization(model):
 
     if torch.cuda.is_available():
         pipeline_diarization.to(torch.device("cuda"))
+
+    logging.info(f"Piepline Diarization déplacée sur {device}")
+
 
     return pipeline_diarization
 
@@ -203,7 +214,10 @@ async def upload_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=404, detail=f"Le fichier {audio_path} n'existe pas.")
 
         with ProgressHook() as hook:
+            logging.info(f"Diarization démarrée")
             diarization = diarization_model(audio_path, hook=hook)
+            logging.info(f"Diarization terminée {diarization}")
+
 
         diarization_json = convert_tracks_to_json(diarization)
         logging.info(f"Résultat de la diarization {diarization_json}")
@@ -828,16 +842,27 @@ Voici la demande de l'utilisateur : {data.question}
     prompt_gpt = [ 
         {"role": "system", "content": "Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation."},
         {"role": "user", "content": f"Voici la transcription de la conversation :\n\n{data.transcription}"},
-        {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en *italique*."},
+        {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en *italique* et **AKABI** sera toujours écrit en majuscule et en gras"},
         # {"role": "assistant", "content": "Les réponses doivent être formatées en texte brut (donc sans symbole markdown) parce que l'affichage coté frontend ne gère pas le markdown, pour une lecture agréable avec des retours à la ligne fréquents.  Utilisez uniquement les informations contenues dans la transcription pour répondre"},
         {"role": "user", "content": f"Voici la demande de l'utilisateur : {data.question}"},
     ]
 
     logging.debug(f"Modèle utilisé: {data.chat_model}")
+    embedding_model, use_cases, use_case_files, index = setup_rag_pipeline()
     
     # Sélection du prompt et de la fonction de streaming en fonction du modèle
     if data.chat_model == "chocolatine":
-        # return StreamingResponse(run_chocolatine_streaming(prompt), media_type="text/plain")
+        if "AKABI" in (data.question).upper():  # pour ignorer la casse
+            question_embedding = embedding_model.encode(data.question).astype("float32")
+            # Recherche dans l'index FAISS
+            _, indices = index.search(question_embedding.reshape(1, -1), k=5)
+            relevant_texts = [use_cases[i] for i in indices[0]]
+
+            # Préparer le contexte pour la réponse GPT
+            context = " ".join(relevant_texts)
+            prompt_chocolatine = f"{prompt_chocolatine}\nVoici également des cas d'usage réalisés chez AKABI: {context}"
+
+
         logging.debug(f"Prompt envoyé à {data.chat_model}: {prompt_chocolatine}")
 
         response = run_chocolatine(prompt_chocolatine)
@@ -850,10 +875,9 @@ Voici la demande de l'utilisateur : {data.question}
     else:
 
         if "AKABI" in (data.question).upper():  # pour ignorer la casse
-            embedding_model, use_cases, use_case_files, index = setup_rag_pipeline()
             question_embedding = embedding_model.encode(data.question).astype("float32")
             # Recherche dans l'index FAISS
-            _, indices = index.search(question_embedding.reshape(1, -1), k=3)
+            _, indices = index.search(question_embedding.reshape(1, -1), k=5)
             relevant_texts = [use_cases[i] for i in indices[0]]
             
             # Préparer le contexte pour la réponse GPT
@@ -861,8 +885,7 @@ Voici la demande de l'utilisateur : {data.question}
             prompt_gpt.append({"role": "system", "content": f"Voici des cas d'usage réalisé chez AKABI: {context}"})
             response = run_gpt4o_mini_streaming(prompt_gpt)
 
-        else:
-            response = run_gpt4o_mini_streaming(prompt_gpt)
+        response = run_gpt4o_mini_streaming(prompt_gpt)
 
         # Récupérer le contenu de la réponse
         full_content = response.choices[0].message.content

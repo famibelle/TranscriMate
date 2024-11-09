@@ -46,11 +46,16 @@ export default {
 
   props: {
     fullTranscription: String, // Transcription passée en prop depuis App.vue
-    chat_model: String
+    chat_model: String,
+    defaultQuestion: { // Ajoute une prop pour la question par défaut
+      type: String,
+      default: 'Fais une synthèse structurée'
+    }
+
   },
   data() {
     return {
-      question: 'Fais une synthèse structurée',
+      question: this.defaultQuestion, // Initialise la question avec la valeur de la prop
       response: '',
       isStreamingChatResponse: false, // État pour suivre si le streaming de réponse du chat est en cours
       currentEmoji: '🤔', // Emoji initial
