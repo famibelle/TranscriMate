@@ -14,7 +14,7 @@ module.exports = defineConfig({
   pages: {
     index: {
       entry: 'src/main.js',  // Point d'entrée de l'application
-      title: 'Transcriptor'  // Nouveau titre pour l'onglet du navigateur
+      title: 'TranscriMate'  // Nouveau titre pour l'onglet du navigateur
     }
   }
 });
