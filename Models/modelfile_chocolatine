@@ -1,0 +1,10 @@
+FROM ./chocolatine-3b-instruct-dpo-v1.2-q4_k_m.gguf
+TEMPLATE """{{ if .System }}<|system|>
+{{ .System }}<|end|>
+{{ end }}{{ if .Prompt }}<|user|>
+{{ .Prompt }}<|end|>
+{{ end }}<|assistant|>
+{{ .Response }}<|end|>
+"""
+PARAMETER stop """{"stop": ["<|end|>","<|user|>","<|assistant|>"]}"""
+SYSTEM """You are a friendly assistant called Chocolatine."""
