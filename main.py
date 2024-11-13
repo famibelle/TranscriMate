@@ -214,13 +214,13 @@ async def upload_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=404, detail=f"Le fichier {audio_path} n'existe pas.")
 
         with ProgressHook() as hook:
-            logging.info(f"Diarization démarrée")
+            logging.debug(f"Diarization démarrée")
             diarization = diarization_model(audio_path, hook=hook)
-            logging.info(f"Diarization terminée {diarization}")
+            logging.debug(f"Diarization terminée {diarization}")
 
 
         diarization_json = convert_tracks_to_json(diarization)
-        logging.info(f"Résultat de la diarization {diarization_json}")
+        logging.debug(f"Résultat de la diarization {diarization_json}")
         return diarization_json
         
     finally:
@@ -333,17 +333,40 @@ async def upload_file(file: UploadFile = File(...)):
             logging.info(extraction_status)
 
             # Envoi du statut "en cours"
-            start_diarization = json.dumps({'status': 'diarization_processing', 'message': 'Séparation des voix en cours...'})
+            start_diarization = json.dumps({'status': 'diarization_processing', 'message': 'Séparation des voix en cours, patience est mère de vertu ...'})
             yield f"{start_diarization}\n"
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
             logging.info(start_diarization)
 
-            with ProgressHook() as hook:
-                diarization = diarization_model(audio_path, hook=hook)
+            logging.debug(f"Diarization démarrée pour le fichier {audio_path}")
+
+            try:
+                with ProgressHook() as hook:
+                    diarization = diarization_model(audio_path, hook=hook)
+                # diarization = diarization_model(audio_path)
+            except Exception as e:
+                logging.error(f"Erreur pendant la diarisation : {str(e)}")
 
             # Envoi final du statut pour indiquer la fin
             end_diarization = json.dumps({'status': 'diarization_done', 'message': 'Séparation des voix terminée.'})
             yield f"{end_diarization}\n"
+
+            logging.debug(f"Diarization terminée {diarization}")
+
+            # diarization_json = convert_tracks_to_json(diarization)
+
+            try:
+                diarization_json = convert_tracks_to_json(diarization)
+                logging.info(f"Taille des données de diarisation en JSON : {len(json.dumps(diarization_json))} octets")
+            except Exception as e:
+                logging.error(f"Erreur pendant la conversion de la diarisation en JSON : {str(e)}")
+                yield json.dumps({"status": "error", "message": f"Erreur pendant la conversion en JSON : {str(e)}"}) + "\n"
+                return
+
+            logging.debug(f"Résultat de la diarization {diarization_json}")
+
+
+
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
             logging.info(end_diarization)
 
@@ -492,7 +515,9 @@ async def process_audio(file: UploadFile = File(...)):
 
         # Étape 1 : Diarisation
         with ProgressHook() as hook:
+            logging.debug(f"Diarization démarrée")
             diarization = diarization_model(audio_path, hook=hook)
+            logging.debug(f"Diarization terminée {diarization}")
 
         segments = []
 
@@ -716,10 +741,17 @@ def process_audio_chunk(data):
 
 # Fonction pour exécuter la commande `ollama run` et obtenir la réponse du modèle
 def run_chocolatine_model(prompt):
-    command = [
+    command_3b = [
         "ollama", "run", "jpacifico/chocolatine-3b",
         prompt
     ]
+
+    command = [
+        "ollama" "run" "chocolatine-128k:latest",
+        prompt
+    ]
+
+    
     result = subprocess.run(command, capture_output=True, text=True)
     logging.info("Command output:", result.stdout)  # Affiche la sortie pour vérification
     logging.info("Command error:", result.stderr)  # Affiche les erreurs éventuelles

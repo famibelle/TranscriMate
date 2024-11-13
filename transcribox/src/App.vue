@@ -1211,6 +1211,11 @@ export default {
           body: formData
         });
 
+        if (!response.ok) {
+          console.error("Erreur dans la réponse du serveur :", response.statusText);
+        return;
+        }
+        
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
