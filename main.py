@@ -20,6 +20,7 @@ from starlette.websockets import WebSocketDisconnect
 from RAG import load_embedding_model, load_text_files, create_faiss_index, setup_rag_pipeline, search_in_index
 
 import io
+from collections import deque
 
 import filetype
 import logging
@@ -152,7 +153,7 @@ Transcriber_Whisper = pipeline(
 
 Transcriber_Whisper_live = pipeline(
         "automatic-speech-recognition",
-        model = "openai/whisper-small",
+        model = "openai/whisper-medium",
         chunk_length_s=30,
         # stride_length_s=(4, 2),
         device=device    
@@ -566,12 +567,17 @@ async def process_audio(file: UploadFile = File(...)):
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
 get_speech_timestamps = utils['get_speech_timestamps'] if isinstance(utils, dict) else utils[0]
 
+
+initial_maxlen = 1  # Début du buffer à 1
+target_maxlen = 5  # Valeur cible définie pour le buffer
+
+buffer = deque(maxlen=initial_maxlen)  # Buffer pour stocker 30 secondes
+
 @app.websocket("/streaming_audio/")
 async def websocket_audio_receiver(websocket: WebSocket):
+    global buffer# Ajout de buffer comme variable globale pour éviter l'erreur
     await websocket.accept()
-    print("Client connecté, en attente des données")
-
-    denoiser = AudioDenoiser(device=device)
+    logging.debug("Client connecté, en attente des données")
 
     try:
         while True:
@@ -585,67 +591,62 @@ async def websocket_audio_receiver(websocket: WebSocket):
                 channels=1
             )
 
-            # Convertir AudioSegment en NumPy pour Silero VAD
-            samples = np.array(audio_segment.get_array_of_samples())
-            audio_data = torch.from_numpy(samples).float() / 32768.0  # Normalisation en float32
+            # Ajouter le segment audio au buffer
+            buffer.append(audio_segment)
 
-            # Utiliser Silero VAD pour détecter la voix
-            speech_timestamps = get_speech_timestamps(audio_data, model, sampling_rate=16000)
+            # Augmente dynamiquement la taille de maxlen jusqu'à atteindre target_maxlen
+            if len(buffer) == buffer.maxlen and buffer.maxlen < target_maxlen:
+                # Augmente maxlen du buffer
+                buffer = deque(buffer, maxlen=buffer.maxlen + 1)
+                logging.debug(f"buffer.maxlen: {buffer.maxlen}")
 
-            if speech_timestamps:
-                print("Voix détectée, lancement de la transcription")
-                # Calculer la durée du chunk
-                chunk_duration = audio_segment.duration_seconds
-                print(f"Chunk duration: {chunk_duration} seconds")
+            # Calculer la durée du chunk
+            chunk_duration = audio_segment.duration_seconds
+            logging.debug(f"Chunk duration: {chunk_duration} seconds")
+            logging.debug(f"current_settings: {current_settings['task']}")
+            print(f"Chunk duration: {chunk_duration} seconds")
 
-                # Sauvegarder le chunk dans un fichier temporaire
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-                    audio_segment.export(temp_file.name, format="wav")
-                    
-                    denoiser.process_audio_file(temp_file.name, temp_file.name, auto_scale=True)
+            print(f"len(buffer)={len(buffer)}; buffer.maxlen={buffer.maxlen}")
 
+            if len(buffer) == (buffer.maxlen):
+                combined_audio = sum(buffer)  # Combine tous les AudioSegments en un seul
+
+                # Créer un fichier temporaire pour l'audio combiné
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    # Exporter combined_audio dans le fichier temporaire
+                    combined_audio.export(tmp_file.name, format="wav")
+                    tmp_file_path = tmp_file.name
 
                 if current_settings['task'] != "transcribe":
                     generate_kwargs={
-                        "language": "english", 
-                        "condition_on_prev_tokens": True
-                        } 
-
-                    transcription_live = Transcriber_Whisper_live(
-                        temp_file.name,
-                        return_timestamps=False,
-                        generate_kwargs = generate_kwargs
-                    )
-
+                        "task": "translate",
+                        "return_timestamps": False
+                    }
                 else:
-                    generate_kwargs={"condition_on_prev_tokens": True} 
-    
-                    # Transcrire l'audio
-                    transcription_live = Transcriber_Whisper_live(
-                        temp_file.name,
-                        return_timestamps=False,
-                        generate_kwargs = generate_kwargs
-                    )
+                    generate_kwargs={
+                        "return_timestamps": False
+                    }
 
-                    print(f"Transcription: {transcription_live}")
+                transcription_live = Transcriber_Whisper_live(
+                    tmp_file_path,
+                    generate_kwargs = generate_kwargs
+                )
+
+                print(f"Transcription: {transcription_live}")
+                logging.debug(f"Transcription: {transcription_live}")
 
                 # Envoyer les données au frontend
                 await websocket.send_json({
-                    'chunk_duration': chunk_duration,
+                    'chunk_duration': combined_audio.duration_seconds,
                     'transcription_live': transcription_live
                 })
 
-                # Supprimer le fichier temporaire
-                os.unlink(temp_file.name)
-    
-            else:
-                print("Aucune voix détectée, passage au chunk suivant")
-                websocket.send_json({
-                    'chunk_duration': 0,
-                    'transcription_live': "..."
-                })
+                # Supprimer le fichier temporaire après transcription
+                os.remove(tmp_file_path)
+
+
     except WebSocketDisconnect:
-        print("Client déconnecté")
+        logging.debug("Client déconnecté")
 
 
 def convert_tracks_to_json(tracks):

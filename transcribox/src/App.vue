@@ -594,8 +594,8 @@ export default {
             // Accumuler l'intégralité de l'audio
             this.fullAudioBuffer.push(int16Data);
 
-            // Vérifier si nous avons accumulé au moins 3 secondes d'audio
-            if (this.bufferDuration >= 2) {
+            // Vérifier si nous avons accumulé au moins 1 secondes d'audio
+            if (this.bufferDuration >= 1) {
               const mergedBuffer = this.mergeBuffers(this.audioBuffer);
 
               // Envoyer les données au backend
@@ -616,7 +616,7 @@ export default {
 
         } catch (err) {
           console.error('Erreur lors de l\'accès au microphone:', err);
-          alert('Impossible d\'accéder au microphone. Veuillez vérifier les permissions.');
+          alert('Impossible d\'accéder au microphone. Veuillez vérifier les permissions.', err);
         }
       } else {
         // Arrêt de l'enregistrement
