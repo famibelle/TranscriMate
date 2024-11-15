@@ -1,6 +1,9 @@
 import asyncio
 from rich.progress import Progress
-from silero_vad import get_speech_timestamps
+# from silero_vad import get_speech_timestamps
+# from pysilero_vad import SileroVoiceActivityDetector
+from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
+
 from audio_denoiser.AudioDenoiser import AudioDenoiser
 import subprocess
 from typing import Generator, Tuple
@@ -563,9 +566,10 @@ async def process_audio(file: UploadFile = File(...)):
             logging.info(f"Fichier temporaire {audio_path} supprimé.")
 
 
-# Charger le modèle Silero VAD
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-get_speech_timestamps = utils['get_speech_timestamps'] if isinstance(utils, dict) else utils[0]
+# # Charger le modèle Silero VAD
+# model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+# get_speech_timestamps = utils['get_speech_timestamps'] if isinstance(utils, dict) else utils[0]
+model_vad = load_silero_vad()
 
 
 initial_maxlen = 1  # Début du buffer à 1
@@ -616,6 +620,17 @@ async def websocket_audio_receiver(websocket: WebSocket):
                     # Exporter combined_audio dans le fichier temporaire
                     combined_audio.export(tmp_file.name, format="wav")
                     tmp_file_path = tmp_file.name
+                
+                wav_vad = read_audio(tmp_file_path)
+
+                speech_timestamps = get_speech_timestamps(wav_vad, model_vad)
+
+                # Effectuer la détection
+                if speech_timestamps:
+                    print("Speech")
+                else:
+                    print("Silence")
+
 
                 if current_settings['task'] != "transcribe":
                     generate_kwargs={
