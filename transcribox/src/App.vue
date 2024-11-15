@@ -4,388 +4,468 @@
 
       <div class="tabs-container">
         <div class="tabs-header">
-      <button 
-        @click="activeTab = 'tab1'" 
-        :class="['tab-button', { active: activeTab === 'tab1' }]"
-      >
-      <span class="tab-title">Trancriptor 🎙️</span>
-      
-      </button>
-      <button 
-        @click="activeTab = 'tab2'" 
-        :class="['tab-button', { active: activeTab === 'tab2' }]"
-      >
-      <span class="tab-title">AKABot 🤖</span>
-  
-      
-      </button>
-    </div>
 
-    <div class="tab-content">
+          <button @click="activeTab = 'tab1'" :class="['tab-button', { active: activeTab === 'tab1' }]">
+            <span class="tab-title">Trancription 🎙️</span>
+          </button>
 
-    <!-- Contenu du premier onglet -->
-    <div v-if="activeTab === 'tab1'">
-      <!-- Vue principale affichée après l'upload du fichier -->
-      <div v-if="file">
-        <!-- Section fichier -->
-        <div class="file-container">
-          <div class="file-header">📁 Fichier
-            <div class="settings-group">
-              <button @click="toggleDarkMode" class="settings-button">{{ isDarkMode ? "🌞" : "🌙" }}</button>
-            </div>
-          </div>
-          <div class="file-body">
-            <span>{{ file.name }}</span>
-            <div class="controls">
-              <button @click="removeFile">❌</button>
-            </div>
-          </div>
+          <button @click="activeTab = 'tab2'" :class="['tab-button', { active: activeTab === 'tab2' }]">
+            <span class="tab-title">AKABot 🤖</span>
+          </button>
+
+          <button @click="activeTab = 'tab3'" :class="['tab-button', { active: activeTab === 'tab3' }]">
+            <span class="tab-title">Traduction 🗣️</span>
+          </button>
+
         </div>
 
-        <!-- Section audio-player avec style similaire à stats-container -->
-        <div class="audio-player-container">
-          <div class="audio-player-header">🎵 Lecture Audio</div>
-          <div class="audio-player-body">
-            <!-- Bouton de lecture -->
-            <button @click="togglePlay">
-              <span v-if="isPlaying">⏸️</span>
-              <span v-else>▶️</span>
-            </button>
-            <!-- Barre de progression -->
-            <input type="range" min="0" :max="audioDuration" v-model="currentTime" @input="seekAudio" />
-            <!-- Affichage du temps actuel et de la durée totale -->
-            <span>{{ formatTime(currentTime) }} / {{ formatTime(audioDuration) }}</span>
-          </div>
+        <div class="tab-content">
 
-          <!-- Affichage du thumbnail si disponible -->
-          <div v-if="thumbnail" class="thumbnail-preview">
-            <h3>Aperçu de la vidéo :</h3>
-            <img :src="thumbnail" alt="Thumbnail de la vidéo" />
-          </div>
-
-          <!-- Élément vidéo caché pour capturer le thumbnail -->
-          <video ref="video" style="display: none;" @loadeddata="captureThumbnail"></video>
-        </div>
-
-        <!-- Section de la barre de progression ASCII pour la transcription globale -->
-        <div class="progress-bar-container" v-if="!isTranscriptionComplete">
-          <div class="progress-bar-header">📈 Progression de la {{ settings.task === "transcribe" ? "Transcription" : "Traduction" }}
-          </div>
-          <div>
-            <div class="loading-message">{{ loadingMessage }}</div>
-            <pre>{{ progressBarExtractionAudio }}</pre>
-          </div>
-          <div v-if="progressMessage">
-            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">🗣️</span>
-            {{ progressMessage }}
-            <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
-          </div>
-          <div class="progress-bar-body">
-            <!-- Barre de progression ASCII pour la transcription globale -->
-            <pre>{{ updateAsciiProgressBar() }}</pre>
-            <p>{{ transcriptionProgress.toFixed(2) }}% de l'audio transcrit</p> <!-- Montre le pourcentage -->
-          </div>
-        </div>
-
-
-
-        <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
-        <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
-          <div class="conversation-header">💬 Conversation
-            <span v-if="isTranscriptionComplete" class="info-icon" title="Clic gauche pour lire, clic droit pour renommer le locuteur">ℹ️</span><span v-if="!isTranscriptionComplete" class="dots">...</span>
-            </div>
-          <div class="conversation-body">
-            <span v-if="isTranscriptionComplete">
-              <p class="instruction">Astuce : Utilisez un LLM sécurisé pour faire le compte rendu de la conversation </p>
-            </span>
-            <div v-for="(segment, index) in transcriptions" :key="index" class="message"
-              :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
-              <div class="message-header">
-                <span v-if="!segment.isEditing" class="speaker"
-                  @click="isTranscriptionComplete ? toggleSpeakerAudio(segment, index) : null"
-                  @contextmenu.prevent="isTranscriptionComplete ? enableEditMode(segment) : null"
-                  @touchstart.prevent="handleTouchStart($event, segment)" @touchend.prevent="handleTouchEnd($event)">
-
-                  <span v-if="playingIndex === index">⏸️</span>
-                  {{ segment.speaker }}:
-                </span>
-                <input v-else class="edit-input" type="text" v-model="segment.speaker"
-                  :disabled="!isTranscriptionComplete" @blur="applySpeakerChange(segment)"
-                  @keyup.enter="applySpeakerChange(segment)" />
+          <!-- Contenu du premier onglet -->
+          <div v-if="activeTab === 'tab1'">
+            <!-- Vue principale affichée après l'upload du fichier -->
+            <div v-if="file">
+              <!-- Section fichier -->
+              <div class="file-container">
+                <div class="file-header">📁 Fichier
+                  <div class="settings-group">
+                    <button @click="toggleDarkMode" class="settings-button">{{ isDarkMode ? "🌞" : "🌙" }}</button>
+                  </div>
+                </div>
+                <div class="file-body">
+                  <span>{{ file.name }}</span>
+                  <div class="controls">
+                    <button @click="removeFile">❌</button>
+                  </div>
+                </div>
               </div>
 
-              <!-- Texte complet du segment entouré dans une bulle -->
-              <div class="message-body">
-                <div class="chunk-container">
-                  <span v-for="(chunk, i) in segment.text.chunks" :key="i" class="chunk"
-                    @click="isTranscriptionComplete ? playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i) : null">
-                    {{ chunk.text }}<span v-if="i < segment.text.chunks.length - 1"> </span>
+              <!-- Section audio-player avec style similaire à stats-container -->
+              <div class="audio-player-container">
+                <div class="audio-player-header">🎵 Lecture Audio</div>
+                <div class="audio-player-body">
+                  <!-- Bouton de lecture -->
+                  <button @click="togglePlay">
+                    <span v-if="isPlaying">⏸️</span>
+                    <span v-else>▶️</span>
+                  </button>
+                  <!-- Barre de progression -->
+                  <input type="range" min="0" :max="audioDuration" v-model="currentTime" @input="seekAudio" />
+                  <!-- Affichage du temps actuel et de la durée totale -->
+                  <span>{{ formatTime(currentTime) }} / {{ formatTime(audioDuration) }}</span>
+                </div>
+
+                <!-- Affichage du thumbnail si disponible -->
+                <div v-if="thumbnail" class="thumbnail-preview">
+                  <h3>Aperçu de la vidéo :</h3>
+                  <img :src="thumbnail" alt="Thumbnail de la vidéo" />
+                </div>
+
+                <!-- Élément vidéo caché pour capturer le thumbnail -->
+                <video ref="video" style="display: none;" @loadeddata="captureThumbnail"></video>
+              </div>
+
+              <!-- Section de la barre de progression ASCII pour la transcription globale -->
+              <div class="progress-bar-container" v-if="!isTranscriptionComplete">
+                <div class="progress-bar-header">📈 Progression de la {{ settings.task === "transcribe" ?
+                  "Transcription" : "Traduction" }}
+                </div>
+                <div>
+                  <div class="loading-message">{{ loadingMessage }}</div>
+                  <pre>{{ progressBarExtractionAudio }}</pre>
+                </div>
+                <div v-if="progressMessage">
+                  <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">🗣️</span>
+                  {{ progressMessage }}
+                  <span v-if="progressData.status === 'diarization_processing'" class="pulsating-emoji">👂</span>
+                </div>
+                <div class="progress-bar-body">
+                  <!-- Barre de progression ASCII pour la transcription globale -->
+                  <pre>{{ updateAsciiProgressBar() }}</pre>
+                  <p>{{ transcriptionProgress.toFixed(2) }}% de l'audio transcrit</p> <!-- Montre le pourcentage -->
+                </div>
+              </div>
+
+
+
+              <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
+              <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
+                <div class="conversation-header">💬 Conversation
+                  <span v-if="isTranscriptionComplete" class="info-icon"
+                    title="Clic gauche pour lire, clic droit pour renommer le locuteur">ℹ️</span><span
+                    v-if="!isTranscriptionComplete" class="dots">...</span>
+                </div>
+                <div class="conversation-body">
+                  <span v-if="isTranscriptionComplete">
+                    <p class="instruction">Astuce : Utilisez un LLM sécurisé pour faire le compte rendu de la
+                      conversation </p>
+                  </span>
+                  <div v-for="(segment, index) in transcriptions" :key="index" class="message"
+                    :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
+                    <div class="message-header">
+                      <span v-if="!segment.isEditing" class="speaker"
+                        @click="isTranscriptionComplete ? toggleSpeakerAudio(segment, index) : null"
+                        @contextmenu.prevent="isTranscriptionComplete ? enableEditMode(segment) : null"
+                        @touchstart.prevent="handleTouchStart($event, segment)"
+                        @touchend.prevent="handleTouchEnd($event)">
+
+                        <span v-if="playingIndex === index">⏸️</span>
+                        {{ segment.speaker }}:
+                      </span>
+                      <input v-else class="edit-input" type="text" v-model="segment.speaker"
+                        :disabled="!isTranscriptionComplete" @blur="applySpeakerChange(segment)"
+                        @keyup.enter="applySpeakerChange(segment)" />
+                    </div>
+
+                    <!-- Texte complet du segment entouré dans une bulle -->
+                    <div class="message-body">
+                      <div class="chunk-container">
+                        <span v-for="(chunk, i) in segment.text.chunks" :key="i" class="chunk"
+                          @click="isTranscriptionComplete ? playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i) : null">
+                          {{ chunk.text }}<span v-if="i < segment.text.chunks.length - 1"> </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
+              <div v-if="transcriptions.length > 0" class="transcription-full-container">
+                <div class="transcription-header">📝 {{ isTranscriptionComplete ? "Transcription complète" :
+                  "Transcription en cours à " }} {{isTranscriptionComplete ? "" : transcriptionProgress.toFixed(2)}}
+                  {{!isTranscriptionComplete ? "%" : ""}}
+
+                </div>
+                <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
+                <textarea v-model="fullTranscription" class="transcription-textarea" readonly
+                  oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
+              </div>
+
+
+              <div class="stats-container" v-if="isTranscriptionComplete">
+                <div class="stats-header">🤖 Chatbot</div>
+                <div class="stats-body"></div>
+                <div id="app">
+                  <QuestionForm :fullTranscription="fullTranscription" :chat_model="settings.chat_model" />
+                </div>
+              </div>
+
+
+
+
+
+
+              <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
+              <div class="stats-container" v-if="diarization !== null">
+                <div class="stats-header">📊 Statistiques</div>
+                <div class="stats-body">
+                  <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
+                  <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
+
+                  <div class="stats-subheader">👥 Répartition temps de parole</div>
+                  <ul>
+                    <li v-for="(speakerStat, index) in speechStats.speakers" :key="index" class="speaker-stat">
+                      <span class="speaker-label">{{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}%
+                        du
+                        temps total</span>
+                      <div class="bar-container">
+                        <div class="bar" :style="{ width: speakerStat.percentage.toFixed(2) + '%' }"></div>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Paramètre -->
+              <div class="stats-container">
+                <div class="stats-header">⚙️ Paramètres du Chatbot</div>
+                <div class="settings-group">
+                </div>
+                <!-- Fenêtre modale pour les paramètres de transcription -->
+                <div class="settings-modal">
+                  <div>
+                    <div>
+                      <div>
+                        <label class="switch">
+                          <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
+                          <span class="slider"></span>
+                        </label> <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
+                      </div>
+                      <div>
+                        <label class="switch">
+                          <input type="checkbox" :checked="settings.chat_model === 'chocolatine'" @change="toggleModel">
+                          <span class="slider"></span>
+                        </label> <span :class="{ bold: settings.chat_model === 'chocolatine'}">Chocolatine🍫🥖</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                  </div>
+                  <div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Interface d'upload si aucun fichier n'est sélectionné -->
+            <div v-else class="upload-container">
+              <!-- Titre principal et sous-titre pour clarifier la fonction du service -->
+              <div class="stats-container">
+                <div class="stats-header">🎙️ Convertissez vos fichiers audio et vidéo en texte, avec identification des
+                  intervenants</div>
+                <div class="stats-body">
+                  <p>Déposez un fichier audio ou vidéo, et notre IA extrait automatiquement la bande son, sépare les
+                    voix et transforme chaque parole en texte associé à son locuteur.</p>
+                </div>
+              </div>
+              <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
+                <p v-if="!isRecording">Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
+                <button v-if="!isRecording" @click.stop="triggerFileInput">📁 Sélectionnez un fichier</button>
+                <p v-if="!isRecording">ou</p>
+                <!-- Bouton d'enregistrement rond -->
+                <div class="record-button-wrapper">
+                  <button @click.stop="toggleRecording" class="record-button"
+                    :class="{ 'record-button--recording': isRecording }"
+                    :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+                    <span class="record-button__inner">🎙️</span>
+                  </button>
+
+                  <!-- Label sous le bouton -->
+                  <span class="record-button__label">
+                    {{ isRecording ? 'Stop' : 'Enregistrer la conversation directement' }}
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
-        <div v-if="transcriptions.length > 0" class="transcription-full-container">
-          <div class="transcription-header">📝 {{ isTranscriptionComplete ? "Transcription complète" : "Transcription en cours à " }} {{isTranscriptionComplete ?  "" : transcriptionProgress.toFixed(2)}} {{!isTranscriptionComplete ?  "%" : ""}}
-            
-          </div>
-          <button @click="copyToClipboard" class="copy-button">📋 Copier</button>
-          <textarea v-model="fullTranscription" class="transcription-textarea" readonly
-            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
-        </div>
+              <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a"
+                style="display: none" />
 
+              <!-- Affichage du temps d'enregistrement -->
+              <div v-if="isRecording" class="recording-timer">
+                Enregistrement en cours: {{ formatTime(recordingTime) }}
+                <div>{{ transcriptionLive.text }}</div>
 
-        <div class="stats-container" v-if="isTranscriptionComplete">
-          <div class="stats-header">🤖 Chatbot</div>
-          <div class="stats-body"></div>
-          <div id="app">
-            <QuestionForm 
-            :fullTranscription="fullTranscription"
-            :chat_model="settings.chat_model"
-            />
-          </div>
-          </div>
-          
+              </div>
 
+              <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
+              <div class="stats-container">
+                <div class="stats-header">🚀 Comment ça marche ?</div>
 
+                <ol>
+                  <li><strong>Ajoutez un fichier:</strong> 📂glissez-déposez un fichier audio ou vidéo dans l’espace
+                    ci-dessus.</li>
+                  <li><strong>Traitement automatique:</strong> notre technologie d'IA extrait la bande son 📞, distingue
+                    chaque voix 👥 et crée une transcription complète, organisée par intervenant.</li>
+                  <li><strong>Copiez la transcription:</strong> obtenez un document textuel clair et structuré, prêt à
+                    être copié 📋 et utilisé où vous le souhaitez.</li>
+                  <li><strong>Chatbot:</strong>Demander à l'AI 🤖 d'en faire une synthèse</li>
+                </ol>
 
+              </div>
 
+              <!-- Exemple de sortie pour montrer la séparation des voix -->
+              <div class="stats-container">
+                <div class="stats-header">✨ Exemple de sortie</div>
+                <p><strong>Alice</strong> : Bonjour, comment allez-vous ?</p>
+                <p><strong>Bob</strong> : Très bien, merci. Et vous ?</p>
+                <p><strong>Clara</strong> : Impeccable !</p>
+              </div>
 
-        <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
-        <div class="stats-container" v-if="diarization !== null">
-          <div class="stats-header">📊 Statistiques</div>
-          <div class="stats-body">
-            <p>{{ speechStats.totalSpeakers }} locuteurs identifiés</p>
-            <p>Durée : {{ formatTime(speechStats.totalDuration) }}</p>
-
-            <div class="stats-subheader">👥 Répartition temps de parole</div>
-            <ul>
-              <li v-for="(speakerStat, index) in speechStats.speakers" :key="index" class="speaker-stat">
-                <span class="speaker-label">{{ speakerStat.speaker }} : {{ speakerStat.percentage.toFixed(2) }}% du
-                  temps total</span>
-                <div class="bar-container">
-                  <div class="bar" :style="{ width: speakerStat.percentage.toFixed(2) + '%' }"></div>
+              <!-- Paramètre -->
+              <div class="stats-container">
+                <div class="stats-header">⚙️ Paramètres généraux</div>
+                <div class="settings-group">
                 </div>
-              </li>
-            </ul>
-          </div>
-        </div>
+                <!-- Fenêtre modale pour les paramètres de transcription -->
+                <div class="settings-modal">
+                  <div>
+                    <div>
 
-        <!-- Paramètre -->
-        <div class="stats-container">
-          <div class="stats-header">⚙️ Paramètres du Chatbot</div>
-          <div class="settings-group">
+                      <div>
+                        <label class="switch">
+                          <input type="checkbox" :checked="settings.task === 'transcribe'" @change="toggleTask">
+                          <span class="slider"></span>
+                        </label> <span :class="{ bold: settings.task === 'transcribe' }">Transcrire</span>
+
+                      </div>
+
+                      <div>
+                        <label class="switch">
+                          <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
+                          <span class="slider"></span>
+                        </label> <span :class="{ bold: settings.task === 'translate' }">Traduire</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                  </div>
+                  <div>
+                  </div>
+                </div>
+              </div>
             </div>
-          <!-- Fenêtre modale pour les paramètres de transcription -->
-          <div class="settings-modal">
-              <div>
+          </div>
+
+          <div v-if="activeTab === 'tab2'">
+            <div id="app" class="page-container">
+
+              <div class="stats-container">
+                <div class="stats-header">🤖 AKAbot</div>
+                <div class="stats-body"></div>
+                <div id="app">
+                  <QuestionForm :defaultQuestion="'Que fait AKABI en IA?'" :fullTranscription="fullTranscription"
+                    :chat_model="settings.chat_model" />
+                </div>
+              </div>
+
+
+              <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
+              <div class="stats-container">
+                <div class="stats-header">🧩 Comment ça marche ?</div>
+                <ol>
+                  <li><strong>Chatbot: </strong>Demandez à AKAbot 🤖 comment AKABI peut vous aider dans vos projets d'IA
+                  </li>
+                  <li>
+                    <strong>Posez une question: </strong>Demandez à AKABot de l'aide sur vos projets IA en lui posant
+                    des questions spécifiques.
+                    <em>Exemples de questions:</em>
+                    <ul>
+                      <li>"Quels sont les cas d'usage d'AKABI en IA ?"</li>
+                      <li>"Comment AKABI peut m'aider avec des solutions de RAG ?"</li>
+                    </ul>
+                  </li>
+
+                  <li>
+                    <strong>Interaction guidée: </strong>Si vous ne savez pas par où commencer, essayez une question
+                    générale, comme "Que propose AKABI dans le domaine de la prédiction ?".<br>
+                    AKABot vous orientera vers les solutions IA les plus adaptées.
+                  </li>
+
+                  <li>
+                    <strong>Recevez des réponses précises: </strong>AKABot est alimenté par les use cases d'AKABI, donc
+                    chaque réponse est basée sur des applications concrètes et des projets réels.<br>
+                    Vous obtiendrez des informations détaillées sur la manière dont AKABI aborde les problématiques
+                    courantes en IA, que ce soit en traitement de données, en génération de langage, ou en
+                    automatisation.
+                  </li>
+
+                  <li>
+                    <strong>Demandez des conseils personnalisés: </strong>Besoin d’une solution sur mesure ? Posez des
+                    questions spécifiques à votre secteur pour recevoir des recommandations d'AKABot sur les solutions
+                    IA pertinentes pour vous.
+                  </li>
+                </ol>
+
+              </div>
+              <!-- Paramètre -->
+              <div class="stats-container">
+                <div class="stats-header">⚙️ Paramètres du Chatbot</div>
+                <div class="settings-group">
+                </div>
+                <!-- Fenêtre modale pour les paramètres de transcription -->
+                <div class="settings-modal">
+                  <div>
+                    <div>
+                      <div>
+                        <label class="switch">
+                          <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
+                          <span class="slider"></span>
+                        </label> <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
+                      </div>
+                      <div>
+                        <label class="switch">
+                          <input type="checkbox" :checked="settings.chat_model === 'chocolatine'" @change="toggleModel">
+                          <span class="slider"></span>
+                        </label> <span :class="{ bold: settings.chat_model === 'chocolatine'}">Chocolatine🍫🥖</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                  </div>
+                  <div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+
+
+          </div>
+
+          <div v-if="activeTab === 'tab3'">
+            <div id="app" class="page-container">
+              <div class="stats-container">
+                <div class="stats-header">Live 🗣️➡️💬</div>
+                <div class="stats-body"></div>
+                <div id="app">
+
+                  <p v-if="!isRecording"></p>
+                  <!-- Bouton d'enregistrement rond -->
+                  <div class="record-button-wrapper">
+                    <button @click.stop="toggleRecording" class="record-button"
+                      :class="{ 'record-button--recording': isRecording }"
+                      :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+                      <span class="record-button__inner">🎙️</span>
+                    </button>
+
+                    <!-- Label sous le bouton -->
+                    <span class="record-button__label">
+                      {{ isRecording ? 'Stop' : 'Cliquez pour démarrer le sous-titrage' }}
+                    </span>
+                  </div>
+
+                  <!-- Affichage du temps d'enregistrement -->
+                  <div v-if="isRecording" class="recording-timer">
+                    Enregistrement en cours: {{ formatTime(recordingTime) }}
+                    <div>{{ transcriptionLive.text }}</div>
+                  </div>
+
+            <!-- Paramètre -->
+            <div class="stats-container">
+              <div class="stats-header">⚙️ Paramètres généraux</div>
+              <div class="settings-group">
+              </div>
+              <!-- Fenêtre modale pour les paramètres de transcription -->
+              <div class="settings-modal">
                 <div>
                   <div>
-                    <label class="switch">
-                      <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
-                      <span class="slider"></span>
-                    </label>       <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
-                  </div>                 
-                  <div>
-                    <label class="switch">
-                      <input type="checkbox" :checked="settings.chat_model === 'chocolatine'" @change="toggleModel">
-                      <span class="slider"></span>
-                    </label> <span :class="{ bold: settings.chat_model === 'chocolatine'}">Chocolatine🍫🥖</span>
+
+                    <div>
+                      <label class="switch">
+                        <input type="checkbox" :checked="settings.task === 'transcribe'" @change="toggleTask">
+                        <span class="slider"></span>
+                      </label> <span :class="{ bold: settings.task === 'transcribe' }">Transcrire</span>
+
+                    </div>
+
+                    <div>
+                      <label class="switch">
+                        <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
+                        <span class="slider"></span>
+                      </label> <span :class="{ bold: settings.task === 'translate' }">Traduire</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div>
-              </div>
-              <div>
-              </div>
-            </div>
-          </div>       
-        </div>
-
-      <!-- Interface d'upload si aucun fichier n'est sélectionné -->
-      <div v-else class="upload-container">
-        <!-- Titre principal et sous-titre pour clarifier la fonction du service -->
-        <div class="stats-container">
-          <div class="stats-header">🎙️ Convertissez vos fichiers audio et vidéo en texte, avec identification des intervenants</div>
-          <div class="stats-body">
-            <p>Déposez un fichier audio ou vidéo, et notre IA extrait automatiquement la bande son, sépare les voix et transforme chaque parole en texte associé à son locuteur.</p>
-          </div>
-        </div>
-        <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
-          <p v-if="!isRecording">Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
-          <button v-if="!isRecording" @click.stop="triggerFileInput">📁 Sélectionnez un fichier</button>
-          <p v-if="!isRecording">ou</p>
-        <!-- Bouton d'enregistrement rond -->
-        <div class="record-button-wrapper">
-          <button 
-            @click.stop="toggleRecording" 
-            class="record-button"
-            :class="{ 'record-button--recording': isRecording }"
-            :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'"
-          >
-            <span class="record-button__inner">🎙️</span>
-          </button>
-          
-          <!-- Label sous le bouton -->
-          <span class="record-button__label">
-            {{ isRecording ? 'Stop' : 'Enregistrer la conversation directement' }}
-          </span>
-        </div>
-        </div>
-
-        <input type="file" ref="fileInput" @change="onFileChange" accept="audio/*, video/*, .m4a"
-          style="display: none" />
-
-      <!-- Affichage du temps d'enregistrement -->
-      <div v-if="isRecording" class="recording-timer">
-        Enregistrement en cours: {{ formatTime(recordingTime) }}
-        <div>{{ transcriptionLive.text }}</div>
-  
-      </div>
-
-        <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
-        <div class="stats-container">
-          <div class="stats-header">🚀 Comment ça marche ?</div>
-
-          <ol>
-            <li><strong>Ajoutez un fichier:</strong> 📂glissez-déposez un fichier audio ou vidéo dans l’espace ci-dessus.</li>
-            <li><strong>Traitement automatique:</strong> notre technologie d'IA extrait la bande son 📞, distingue chaque voix 👥 et crée une transcription complète, organisée par intervenant.</li>
-            <li><strong>Copiez la transcription:</strong> obtenez un document textuel clair et structuré, prêt à être copié 📋 et utilisé où vous le souhaitez.</li>
-            <li><strong>Chatbot:</strong>Demander à l'AI 🤖 d'en faire une synthèse</li>
-          </ol>
-
-        </div>
-
-        <!-- Exemple de sortie pour montrer la séparation des voix -->
-        <div class="stats-container">
-          <div class="stats-header">✨ Exemple de sortie</div>
-          <p><strong>Alice</strong> : Bonjour, comment allez-vous ?</p>
-          <p><strong>Bob</strong> : Très bien, merci. Et vous ?</p>
-          <p><strong>Clara</strong> : Impeccable !</p>
-        </div>
-
-        <!-- Paramètre -->
-        <div class="stats-container">
-          <div class="stats-header">⚙️ Paramètres généraux</div>
-          <div class="settings-group">
-            </div>
-          <!-- Fenêtre modale pour les paramètres de transcription -->
-          <div class="settings-modal">
-              <div>
                 <div>
-
-                  <div>
-                    <label class="switch">
-                      <input type="checkbox" :checked="settings.task === 'transcribe'" @change="toggleTask">
-                      <span class="slider"></span>
-                    </label>       <span :class="{ bold: settings.task === 'transcribe' }">Transcrire</span>
-
-                  </div>
-
-                  <div>
-                    <label class="switch">
-                      <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
-                      <span class="slider"></span>
-                    </label>        <span :class="{ bold: settings.task === 'translate' }">Traduire</span>
-                  </div>
                 </div>
-              </div>
-              <div>
-              </div>
-              <div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="activeTab === 'tab2'">
-
-        <div id="app" class="page-container">
-
-        <div class="stats-container">
-          <div class="stats-header">🤖 AKAbot</div>
-        <div class="stats-body"></div>
-        <div id="app">
-            <QuestionForm 
-              :defaultQuestion="'Que fait AKABI en IA?'"
-              :fullTranscription="fullTranscription"
-              :chat_model="settings.chat_model"
-            />
-          </div>
-        </div>
-
-
-                <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
-                <div class="stats-container">
-          <div class="stats-header">🧩 Comment ça marche ?</div>
-          <ol>
-            <li><strong>Chatbot: </strong>Demandez à AKAbot 🤖 comment AKABI peut vous aider dans vos projets d'IA </li>
-            <li>
-      <strong>Posez une question: </strong>Demandez à AKABot de l'aide sur vos projets IA en lui posant des questions spécifiques.
-      <em>Exemples de questions:</em>
-      <ul>
-        <li>"Quels sont les cas d'usage d'AKABI en IA ?"</li>
-        <li>"Comment AKABI peut m'aider avec des solutions de RAG ?"</li>
-      </ul>
-    </li>
-
-    <li>
-      <strong>Interaction guidée: </strong>Si vous ne savez pas par où commencer, essayez une question générale, comme "Que propose AKABI dans le domaine de la prédiction ?".<br>
-      AKABot vous orientera vers les solutions IA les plus adaptées.
-    </li>
-
-    <li>
-      <strong>Recevez des réponses précises: </strong>AKABot est alimenté par les use cases d'AKABI, donc chaque réponse est basée sur des applications concrètes et des projets réels.<br>
-      Vous obtiendrez des informations détaillées sur la manière dont AKABI aborde les problématiques courantes en IA, que ce soit en traitement de données, en génération de langage, ou en automatisation.
-    </li>
-
-    <li>
-      <strong>Demandez des conseils personnalisés: </strong>Besoin d’une solution sur mesure ? Posez des questions spécifiques à votre secteur pour recevoir des recommandations d'AKABot sur les solutions IA pertinentes pour vous.
-    </li>            
-          </ol>
-
-        </div>
-        <!-- Paramètre -->
-        <div class="stats-container">
-          <div class="stats-header">⚙️ Paramètres du Chatbot</div>
-          <div class="settings-group">
-            </div>
-          <!-- Fenêtre modale pour les paramètres de transcription -->
-          <div class="settings-modal">
-              <div>
                 <div>
-                  <div>
-                    <label class="switch">
-                      <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
-                      <span class="slider"></span>
-                    </label>       <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
-                  </div>                 
-                  <div>
-                    <label class="switch">
-                      <input type="checkbox" :checked="settings.chat_model === 'chocolatine'" @change="toggleModel">
-                      <span class="slider"></span>
-                    </label> <span :class="{ bold: settings.chat_model === 'chocolatine'}">Chocolatine🍫🥖</span>
-                  </div>
                 </div>
               </div>
-              <div>
-              </div>
-              <div>
+            </div>
+
+
+                </div>
               </div>
             </div>
-          </div>       
+          </div>
+
+
         </div>
-        
       </div>
-      </div>
-</div>
 
     </div>
-    </div>
+  </div>
 </template>
 
 <script>
