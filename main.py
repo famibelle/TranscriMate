@@ -369,8 +369,6 @@ async def upload_file(file: UploadFile = File(...)):
 
             logging.debug(f"Résultat de la diarization {diarization_json}")
 
-
-
             await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
             logging.info(end_diarization)
 
@@ -566,11 +564,17 @@ async def process_audio(file: UploadFile = File(...)):
             logging.info(f"Fichier temporaire {audio_path} supprimé.")
 
 
+from denoiser import pretrained
+from denoiser.dsp import convert_audio
+import torchaudio
+
+# Charger le modèle pré-entraîné et le déplacer sur le GPU
+model_denoiser = pretrained.dns64().to(device)
+
 # # Charger le modèle Silero VAD
 # model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
 # get_speech_timestamps = utils['get_speech_timestamps'] if isinstance(utils, dict) else utils[0]
 model_vad = load_silero_vad()
-
 
 initial_maxlen = 1  # Début du buffer à 1
 target_maxlen = 5  # Valeur cible définie pour le buffer
@@ -624,11 +628,32 @@ async def websocket_audio_receiver(websocket: WebSocket):
                 wav_vad = read_audio(tmp_file_path)
 
                 speech_timestamps = get_speech_timestamps(wav_vad, model_vad)
+                logging.debug(f"Speech Analysis: {speech_timestamps}")
 
                 # Effectuer la détection
                 if speech_timestamps:
-                    print("Speech détecté")
-                    logging.debug(f"Speech détecté: {speech_timestamps}")
+                    print("Speech détecté ...")
+
+
+                    # Charger et préparer le fichier audio
+                    waveform, sample_rate = torchaudio.load(tmp_file_path)
+
+                    # Convertir l'audio au bon format
+                    waveform = convert_audio(waveform, sample_rate, model_denoiser.sample_rate, model_denoiser.chin)
+
+                    # Déplacer les données sur le GPU
+                    waveform = waveform.to(device)
+
+                    # Appliquer la suppression de bruit
+                    denoised_waveform = model_denoiser(waveform[None])[0]
+
+                    # Déplacer les données nettoyées sur le CPU pour les sauvegarder
+                    denoised_waveform = denoised_waveform.cpu()
+
+                    # Sauvegarder le fichier audio nettoyé
+                    torchaudio.save(tmp_file_path, denoised_waveform, model_denoiser.sample_rate)
+
+
 
                     if current_settings['task'] != "transcribe":
                         generate_kwargs={
@@ -658,13 +683,11 @@ async def websocket_audio_receiver(websocket: WebSocket):
                     print("Silence")
                     await websocket.send_json({
                         'chunk_duration': 0,
-                        'transcription_live': "..."
+                        'transcription_live': {'text': "..."}
                     })
-
 
                 # Supprimer le fichier temporaire après transcription
                 os.remove(tmp_file_path)
-
 
     except WebSocketDisconnect:
         logging.debug("Client déconnecté")
