@@ -152,10 +152,6 @@
               </div>
 
 
-
-
-
-
               <!-- Section pour afficher les statistiques de temps de parole avec style ASCII -->
               <div class="stats-container" v-if="diarization !== null">
                 <div class="stats-header">📊 Statistiques</div>
@@ -219,12 +215,21 @@
                     voix et transforme chaque parole en texte associé à son locuteur.</p>
                 </div>
               </div>
-              <div class="upload-box" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
+              <div
+                class="upload-box"
+                @dragover.prevent="!isRecording && $event"
+                @drop.prevent="!isRecording && handleDrop($event)"
+                @click="!isRecording && triggerFileInput()"
+                :class="{ 'upload-box--disabled': isRecording }"
+              >
+
                 <p v-if="!isRecording">Déposez votre fichier audio 🎙️ ou vidéo 🎬 ici</p>
                 <button v-if="!isRecording" @click.stop="triggerFileInput">📁 Sélectionnez un fichier</button>
                 <p v-if="!isRecording">ou</p>
                 <!-- Bouton d'enregistrement rond -->
                 <div class="record-button-wrapper">
+                  <pre v-html="asciiSpectrogram" v-if="isRecording"></pre>
+
                   <button @click.stop="toggleRecording" class="record-button"
                     :class="{ 'record-button--recording': isRecording }"
                     :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
@@ -294,7 +299,7 @@
                         <label class="switch">
                           <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
                           <span class="slider"></span>
-                        </label> <span :class="{ bold: settings.task === 'translate' }">Traduire</span>
+                        </label> <span :class="{ bold: settings.task === 'translate' }">Traduire en anglais</span>
                       </div>
                     </div>
                   </div>
@@ -396,23 +401,28 @@
           <div v-if="activeTab === 'tab3'">
             <div id="app" class="page-container">
               <div class="stats-container">
-                <div class="stats-header">Live 🗣️➡️💬</div>
+                <div class="stats-header">Tu 🗣️ et tu obtiens la 💬 traduction ou la transcription</div>
                 <div class="stats-body"></div>
                 <div id="app">
-
                   <p v-if="!isRecording"></p>
+
                   <!-- Bouton d'enregistrement rond -->
                   <div class="record-button-wrapper">
+                    <pre v-html="asciiSpectrogram" v-if="isRecording"></pre>
+
                     <button @click.stop="toggleRecording" class="record-button"
                       :class="{ 'record-button--recording': isRecording }"
                       :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
                       <span class="record-button__inner">🎙️</span>
                     </button>
-
                     <!-- Label sous le bouton -->
                     <span class="record-button__label">
                       {{ isRecording ? 'Stop' : 'Cliquez pour démarrer le sous-titrage' }}
                     </span>
+
+
+
+
                   </div>
 
                   <!-- Affichage du temps d'enregistrement -->
@@ -443,7 +453,7 @@
                       <label class="switch">
                         <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
                         <span class="slider"></span>
-                      </label> <span :class="{ bold: settings.task === 'translate' }">Traduire</span>
+                      </label> <span :class="{ bold: settings.task === 'translate' }">Traduire en anglais</span>
                     </div>
                   </div>
                 </div>
@@ -503,6 +513,11 @@ export default {
       volumeHeight: 0,        // Niveau de volume (0 à 100)
       maxHeight: 10,          // Nombre maximum de blocs dans la barre
       asciiVolumeBar: '',     // Contient la barre en ASCII
+      analyser: null,
+      asciiSpectrogram: "", // Pour afficher le spectromètre en ASCII
+
+
+
 
       switch1: true,
 
@@ -600,7 +615,6 @@ export default {
         this.settings.chat_model = this.settings.chat_model === 'gpt-4' ? 'chocolatine' : 'gpt-4';
       },
 
-
     onToggleChange(newValue) {
       console.log('Statut du toggle changé à :', newValue);
     },
@@ -653,39 +667,24 @@ export default {
           this.audioContext = new AudioContext({ sampleRate: 16000 });
           const bufferSize = 4096;
 
+          // Créer l'AnalyserNode
+          this.analyser = this.audioContext.createAnalyser();
+          this.analyser.fftSize = 256; // Taille du FFT (affecte la résolution)
 
-          // const analyser = this.audioContext.createAnalyser();
-          // const source = this.audioContext.createMediaStreamSource(this.stream);
-          // source.connect(analyser);
-
-          // analyser.fftSize = 256;
-          // const dataArray = new Uint8Array(analyser.frequencyBinCount);
           
-          // // Propriétés pour la barre ASCII
-          // this.maxHeight = 10; // Nombre de lignes pour la barre
-          // this.asciiVolumeBar = ''; // Contenu ASCII à afficher
-
-          // const updateVolume = () => {
-          //   analyser.getByteFrequencyData(dataArray);
-          //   const averageVolume = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
-          //   const volumePercentage = Math.min(100, (averageVolume / 255) * 100);
-
-          //   // Mettre à jour la barre ASCII
-          //   this.updateAsciiBar(volumePercentage);
-
-          //   requestAnimationFrame(updateVolume);
-          // };
-
-          // updateVolume();
-          
-          // this.updateAsciiBar = (volumePercentage) => {
-          //   const blocks = Math.round((volumePercentage / 100) * this.maxHeight);
-          //   this.asciiVolumeBar = '█\n'.repeat(blocks).padEnd(this.maxHeight, ' \n');
-          //   console.log(this.asciiVolumeBar); // Afficher la barre dans la console
-          // };
-
           this.scriptNode = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
           this.input = this.audioContext.createMediaStreamSource(this.stream);
+
+          // Créer l'AnalyserNode
+          this.analyser = this.audioContext.createAnalyser();
+          this.analyser.fftSize = 256; // La taille FFT affecte la résolution des données analysées
+
+          // Connecter l'input à l'analyser
+          this.input.connect(this.analyser);
+
+          // Fonction pour analyser les données
+          this.analyzeAudio();
+
 
           this.input.connect(this.scriptNode);
           this.scriptNode.connect(this.audioContext.destination);
@@ -734,6 +733,8 @@ export default {
         }
       } else {
         // Arrêt de l'enregistrement
+        this.asciiSpectrogram = '';
+
         if (this.scriptNode) {
           // Avant de déconnecter, envoyer les données restantes s'il y en a
           if (this.audioBuffer.length > 0) {
@@ -795,6 +796,78 @@ export default {
         this.isRecording = false;
         this.stopTimer();
       }
+    },
+
+    analyzeAudio() {
+      // Créer un tableau de données pour stocker les valeurs de fréquence
+      const bufferLength = this.analyser.frequencyBinCount; // Nombre de valeurs de fréquence
+      const dataArray = new Uint8Array(bufferLength); // Tableau pour stocker les valeurs
+
+      const logFrequencyData = () => {
+        // Obtenir les données de fréquence de l'AnalyserNode
+        this.analyser.getByteFrequencyData(dataArray);
+
+        // Transformer les valeurs en spectromètre ASCII
+        this.asciiSpectrogram = this.generateAsciiSpectrogram(dataArray);
+
+        // Appeler cette fonction à nouveau pour continuer à enregistrer les valeurs
+        requestAnimationFrame(logFrequencyData);
+      };
+
+      // Démarrer l'analyse
+      logFrequencyData();
+    },
+
+    generateAsciiSpectrogram(dataArray) {
+      // Définir les bandes de fréquence intéressantes pour la voix humaine
+      const bands = [
+        { start: 0, end: 8, label: "20-100 Hz" }, // Basses fréquences
+        { start: 8, end: 16, label: "100-400 Hz" }, // Moyennes-basses
+        { start: 16, end: 32, label: "400-1000 Hz" }, // Moyennes
+        { start: 32, end: 64, label: "1000-4000 Hz" }, // Aigus
+      ];
+
+      let ascii = "";
+
+      // Pour chaque bande, créer une ligne de caractères ASCII avec la gamme de fréquence
+      for (const band of bands) {
+        let bandIntensity = 0;
+
+        // Calculer l'intensité moyenne de la bande
+        for (let i = band.start; i < band.end; i++) {
+          bandIntensity += dataArray[i];
+        }
+        bandIntensity /= (band.end - band.start);
+
+        // Normaliser la valeur entre 0 et 10 (le nombre de `█` à afficher)
+        const numFullBlocks = Math.floor((bandIntensity / 255) * 10);
+        const numEmptyBlocks = 10 - numFullBlocks;
+
+        // Générer une barre avec des `█` avec un gradient de couleur
+        let fullBar = "";
+        for (let i = 0; i < numFullBlocks; i++) {
+          const intensityRatio = i / (10 - 1); // Normalisation entre 0 et 1
+          
+          // Calculer la couleur interpolée (du vert au rouge)
+          const red = Math.floor(255 * intensityRatio);
+          const green = Math.floor(255 * (1 - intensityRatio));
+          const color = `rgb(${red}, ${green}, 0)`;
+
+          // Ajouter le bloc avec la couleur
+          fullBar += `<span style="color:${color}">█</span>`;
+        }
+
+        // Générer une partie vide avec des `▒` sans couleur
+        const emptyBar = " ".repeat(numEmptyBlocks);
+
+        // Créer la barre complète
+        const bar = `${fullBar}${emptyBar}`;
+
+        // Ajouter l'étiquette de la bande de fréquence et la barre
+        ascii += `${bar} ${band.label}\n`;
+      }
+
+      return ascii;
     },
 
     convertFloat32ToInt16(buffer) {
@@ -2647,5 +2720,12 @@ input:checked + .slider
   flex: 1;
 }
 
+pre {
+  font-family: monospace, "Courier New", Courier, "Lucida Console", Consolas;
+  white-space: pre;
+  line-height: 1.2em;
+  text-align: left; /* Assurer l'alignement à gauche */
+
+}
 
 </style>

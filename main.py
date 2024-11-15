@@ -653,8 +653,6 @@ async def websocket_audio_receiver(websocket: WebSocket):
                     # Sauvegarder le fichier audio nettoyé
                     torchaudio.save(tmp_file_path, denoised_waveform, model_denoiser.sample_rate)
 
-
-
                     if current_settings['task'] != "transcribe":
                         generate_kwargs={
                             "task": "translate",
