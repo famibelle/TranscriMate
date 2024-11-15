@@ -281,7 +281,7 @@
                     <label class="switch">
                       <input type="checkbox" :checked="settings.task === 'transcribe'" @change="toggleTask">
                       <span class="slider"></span>
-                    </label>       <span :class="{ bold: settings.task === 'transcribe' }">Transcribe</span>
+                    </label>       <span :class="{ bold: settings.task === 'transcribe' }">Transcrire</span>
 
                   </div>
 
@@ -289,7 +289,7 @@
                     <label class="switch">
                       <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
                       <span class="slider"></span>
-                    </label>        <span :class="{ bold: settings.task === 'translate' }">Translate</span>
+                    </label>        <span :class="{ bold: settings.task === 'translate' }">Traduire</span>
                   </div>
                 </div>
               </div>
@@ -420,6 +420,9 @@ export default {
 
       activeTab: 'tab1', // Par défaut, l'onglet actif est le premier
 
+      volumeHeight: 0,        // Niveau de volume (0 à 100)
+      maxHeight: 10,          // Nombre maximum de blocs dans la barre
+      asciiVolumeBar: '',     // Contient la barre en ASCII
 
       switch1: true,
 
@@ -569,6 +572,37 @@ export default {
           const AudioContext = window.AudioContext || window.webkitAudioContext;
           this.audioContext = new AudioContext({ sampleRate: 16000 });
           const bufferSize = 4096;
+
+
+          // const analyser = this.audioContext.createAnalyser();
+          // const source = this.audioContext.createMediaStreamSource(this.stream);
+          // source.connect(analyser);
+
+          // analyser.fftSize = 256;
+          // const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          
+          // // Propriétés pour la barre ASCII
+          // this.maxHeight = 10; // Nombre de lignes pour la barre
+          // this.asciiVolumeBar = ''; // Contenu ASCII à afficher
+
+          // const updateVolume = () => {
+          //   analyser.getByteFrequencyData(dataArray);
+          //   const averageVolume = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
+          //   const volumePercentage = Math.min(100, (averageVolume / 255) * 100);
+
+          //   // Mettre à jour la barre ASCII
+          //   this.updateAsciiBar(volumePercentage);
+
+          //   requestAnimationFrame(updateVolume);
+          // };
+
+          // updateVolume();
+          
+          // this.updateAsciiBar = (volumePercentage) => {
+          //   const blocks = Math.round((volumePercentage / 100) * this.maxHeight);
+          //   this.asciiVolumeBar = '█\n'.repeat(blocks).padEnd(this.maxHeight, ' \n');
+          //   console.log(this.asciiVolumeBar); // Afficher la barre dans la console
+          // };
 
           this.scriptNode = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
           this.input = this.audioContext.createMediaStreamSource(this.stream);
@@ -2532,5 +2566,6 @@ input:checked + .slider
   border-top: none;
   flex: 1;
 }
+
 
 </style>

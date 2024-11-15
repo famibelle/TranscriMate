@@ -627,34 +627,40 @@ async def websocket_audio_receiver(websocket: WebSocket):
 
                 # Effectuer la détection
                 if speech_timestamps:
-                    print("Speech")
+                    print("Speech détecté")
+                    logging.debug(f"Speech détecté: {speech_timestamps}")
+
+                    if current_settings['task'] != "transcribe":
+                        generate_kwargs={
+                            "task": "translate",
+                            "return_timestamps": False
+                        }
+                    else:
+                        generate_kwargs={
+                            "return_timestamps": False
+                        }
+
+                    transcription_live = Transcriber_Whisper_live(
+                        tmp_file_path,
+                        generate_kwargs = generate_kwargs
+                    )
+
+                    print(f"Transcription: {transcription_live}")
+                    logging.debug(f"Transcription: {transcription_live}")
+
+                    # Envoyer les données au frontend
+                    await websocket.send_json({
+                        'chunk_duration': combined_audio.duration_seconds,
+                        'transcription_live': transcription_live
+                    })
+
                 else:
                     print("Silence")
+                    await websocket.send_json({
+                        'chunk_duration': 0,
+                        'transcription_live': "..."
+                    })
 
-
-                if current_settings['task'] != "transcribe":
-                    generate_kwargs={
-                        "task": "translate",
-                        "return_timestamps": False
-                    }
-                else:
-                    generate_kwargs={
-                        "return_timestamps": False
-                    }
-
-                transcription_live = Transcriber_Whisper_live(
-                    tmp_file_path,
-                    generate_kwargs = generate_kwargs
-                )
-
-                print(f"Transcription: {transcription_live}")
-                logging.debug(f"Transcription: {transcription_live}")
-
-                # Envoyer les données au frontend
-                await websocket.send_json({
-                    'chunk_duration': combined_audio.duration_seconds,
-                    'transcription_live': transcription_live
-                })
 
                 # Supprimer le fichier temporaire après transcription
                 os.remove(tmp_file_path)
