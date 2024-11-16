@@ -29,7 +29,7 @@
       
       <!-- Bouton rond avec une flèche ou un carré en fonction de l'état de streaming -->
       <button type="submit" class="submit-button" :disabled="isStreamingChatResponse">
-        <span v-if="!isStreamingChatResponse" class="arrow">🡹</span> <!-- Affiche une flèche si le streaming n'est pas en cours -->
+        <span v-if="!isStreamingChatResponse" class="arrow">▲</span> <!-- Affiche une flèche si le streaming n'est pas en cours -->
         <span v-else class="square">■</span> <!-- Affiche un carré pendant le streaming -->
       </button>
     </form>

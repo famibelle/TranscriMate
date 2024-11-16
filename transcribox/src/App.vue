@@ -299,7 +299,7 @@
                         <label class="switch">
                           <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
                           <span class="slider"></span>
-                        </label> <span :class="{ bold: settings.task === 'translate' }">Traduire en anglais</span>
+                        </label> <span :class="{ bold: settings.task === 'translate' }">Traduire (🇬🇧)</span>
                       </div>
                     </div>
                   </div>
@@ -453,7 +453,7 @@
                       <label class="switch">
                         <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
                         <span class="slider"></span>
-                      </label> <span :class="{ bold: settings.task === 'translate' }">Traduire en anglais</span>
+                      </label> <span :class="{ bold: settings.task === 'translate' }">Traduire (🇬🇧)</span>
                     </div>
                   </div>
                 </div>
