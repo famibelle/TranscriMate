@@ -98,6 +98,14 @@ if torch.cuda.is_available():
 else:
     print(f"Pas de GPU de disponible... Device: {device}")
 
+
+# Vérifier le type par défaut de tensor
+print(f"Type de donnée par défaut : {torch.get_default_dtype()}")
+
+# Vérifier la précision pour les calculs en FP16
+print(f"Disponibilité de la précision FP16 : {torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 0)}")
+
+
 # Initialisation de `current_settings` avec des valeurs par défaut
 # global current_settings
 current_settings = {
@@ -151,7 +159,8 @@ Transcriber_Whisper = pipeline(
         model = model_settings,
         chunk_length_s=30,
         # stride_length_s=(4, 2),
-        device=device    
+        # torch_dtype="torch.float16",    
+        device=device
     )
 
 Transcriber_Whisper_live = pipeline(
@@ -159,8 +168,39 @@ Transcriber_Whisper_live = pipeline(
         model = "openai/whisper-medium",
         chunk_length_s=30,
         # stride_length_s=(4, 2),
-        device=device    
+        # torch_dtype="torch.float16",    
+        device=device
     )
+
+# Si un GPU est disponible, convertir le modèle Whisper en FP16
+if device.type == "cuda":
+    model_post = Transcriber_Whisper.model
+    model_post = model_post.half()  # Convertir en FP16
+    Transcriber_Whisper.model = model_post  # Réassigner le modèle à la pipeline
+
+    model_live = Transcriber_Whisper_live.model
+    model_live = model_live.half()  # Convertir en FP16
+    Transcriber_Whisper_live.model = model_live  # Réassigner le modèle à la pipeline
+
+generate_kwargs_live = {
+    "max_new_tokens": 224,  # Limiter la taille pour accélérer les prédictions en streaming.
+    "num_beams": 1,  # Décodage rapide (greedy decoding).
+    "condition_on_prev_tokens": False,  # Désactiver le contexte entre les segments pour réduire la latence.
+    "compression_ratio_threshold": 1.35,  # Standard pour filtrer les segments improbables.
+    "temperature": 0.0,  # Préférer des transcriptions conservatrices en temps réel.
+    "logprob_threshold": -1.0,  # Filtrer les tokens peu probables.
+    "no_speech_threshold": 0.6,  # Garder une tolérance moyenne pour les silences.
+}
+
+generate_kwargs_aposteriori = {
+    "max_new_tokens": 336,  # Autoriser des transcriptions plus longues (max 448)
+    "num_beams": 4,  # Beam search pour améliorer la qualité de la transcription.
+    "condition_on_prev_tokens": True,  # Maintenir le contexte entre les segments.
+    "compression_ratio_threshold": 2.4,  # Tolérer des segments compressés.
+    "temperature": 0.4,  # Équilibre entre diversité et précision.
+    "logprob_threshold": -1.5,  # Filtrer les tokens improbables.
+    "no_speech_threshold": 0.4,  # Accepter plus de segments contenant des silences.
+}
 
 
 app = FastAPI()
@@ -414,26 +454,21 @@ async def upload_file(file: UploadFile = File(...)):
                 # }
 
                 if current_settings['task'] != "transcribe":
-                    transcription = Transcriber_Whisper(
-                        segment_path,
-                        return_timestamps = True,
-                        # generate_kwargs={"language": "french"} 
-                        generate_kwargs={
-                            "language": "english", 
-                            "condition_on_prev_tokens": True,
-                            # "no_speech_threshold": 0.8  # Augmente pour ignorer plus de bruit ou de silence
-                        } 
-                    )
+                    generate_kwargs={
+                        "language": "english", 
+                    } 
+
                 else:
-                    transcription = Transcriber_Whisper(
-                        segment_path,
-                        return_timestamps = True,
-                        generate_kwargs={
-                            "condition_on_prev_tokens": True,
-                            # "no_speech_threshold": 0.8  # Augmente pour ignorer plus de bruit ou de silence
-                        } 
-                    )
+                    generate_kwargs={
+                    } 
+
                 # Transcrire ce segment avec Whisper
+                transcription = Transcriber_Whisper(
+                    segment_path,
+                    return_timestamps = True,
+                    generate_kwargs= generate_kwargs |  generate_kwargs_aposteriori
+                )
+
                 # Supprimer le fichier de segment une fois transcrit
                 # os.remove(segment_path)
 
@@ -665,7 +700,7 @@ async def websocket_audio_receiver(websocket: WebSocket):
 
                     transcription_live = Transcriber_Whisper_live(
                         tmp_file_path,
-                        generate_kwargs = generate_kwargs
+                        generate_kwargs = generate_kwargs | generate_kwargs_live
                     )
 
                     print(f"Transcription: {transcription_live}")
