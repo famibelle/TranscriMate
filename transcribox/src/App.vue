@@ -86,8 +86,6 @@
                 </div>
               </div>
 
-
-
               <!-- Liste des locuteurs et des segments de transcription avec couleur unique par locuteur -->
               <div class="conversation-container" :class="{ dark: isDarkMode, disabled: !isTranscriptionComplete }">
                 <div class="conversation-header">💬 Conversation
@@ -97,8 +95,7 @@
                 </div>
                 <div class="conversation-body">
                   <span v-if="isTranscriptionComplete">
-                    <p class="instruction">Astuce : Utilisez un LLM sécurisé pour faire le compte rendu de la
-                      conversation </p>
+                    <p class="instruction">Astuce : Editez le nom du SPEAKER (clique droit sur le nom du speaker) pour avoir un compte rendu plus précis </p>
                   </span>
                   <div v-for="(segment, index) in transcriptions" :key="index" class="message"
                     :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
@@ -141,7 +138,6 @@
                 <textarea v-model="fullTranscription" class="transcription-textarea" readonly
                   oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
               </div>
-
 
               <div class="stats-container" v-if="isTranscriptionComplete">
                 <div class="stats-header">🤖 Chatbot</div>
@@ -228,7 +224,7 @@
                 <p v-if="!isRecording">ou</p>
                 <!-- Bouton d'enregistrement rond -->
                 <div class="record-button-wrapper">
-                  <pre v-html="asciiSpectrogram" v-if="isRecording"></pre>
+                  <!-- <pre v-html="asciiSpectrogram" v-if="isRecording"></pre> -->
 
                   <!-- <button @click.stop="toggleRecording" class="record-button"
                     :class="{ 'record-button--recording': isRecording }"
@@ -241,6 +237,7 @@
                     {{ isRecording ? 'STOP ■' : 'REC ●' }}
                   </span> -->
                   <Dictaphone 
+                    :asciiSpectrogram="asciiSpectrogram"
                     :is-recording="isRecording"
                     :audio-level="audioLevel"
                     @click.stop="toggleRecording"
@@ -399,8 +396,6 @@
               </div>
             </div>
 
-
-
           </div>
 
           <div v-if="activeTab === 'tab3'">
@@ -413,20 +408,24 @@
 
                   <!-- Bouton d'enregistrement rond -->
                   <div class="record-button-wrapper">
-                    <pre v-html="asciiSpectrogram" v-if="isRecording"></pre>
+                    <!-- <pre v-html="asciiSpectrogram" v-if="isRecording"></pre> -->
 
-                    <button @click.stop="toggleRecording" class="record-button"
+                    <!-- <button @click.stop="toggleRecording" class="record-button"
                       :class="{ 'record-button--recording': isRecording }"
                       :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
                       <span class="record-button__inner">🎙️</span>
-                    </button>
+                    </button> -->
                     <!-- Label sous le bouton -->
-                    <span class="record-button__label">
+                    <!-- <span class="record-button__label">
                       {{ isRecording ? 'Stop' : 'Cliquez pour démarrer le sous-titrage' }}
-                    </span>
+                    </span> -->
 
-
-
+                    <Dictaphone 
+                      :asciiSpectrogram="asciiSpectrogram"
+                      :is-recording="isRecording"
+                      :audio-level="audioLevel"
+                      @click.stop="toggleRecording"
+                    />
 
                   </div>
 
@@ -435,6 +434,22 @@
                     Enregistrement en cours: {{ formatTime(recordingTime) }}
                     <div>{{ transcriptionLive.text }}</div>
                   </div>
+
+
+              <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
+              <div class="transcription-full-container">
+                <div class="transcription-header"> 💬 Audio transcipt
+                </div>
+                <textarea 
+                  ref="transcriptionArea" 
+                  v-model="accumulatedTranscription" 
+                  class="transcription-textarea" 
+                  readonly
+                  oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'">
+                </textarea>
+              </div>
+
+
 
             <!-- Paramètre -->
             <div class="stats-container">
@@ -509,8 +524,27 @@ export default {
         this.saveSettings();
       },
       deep: true // Cette option n'est pas nécessaire ici car il s'agit d'une chaîne de caractères
+    },
+
+    'transcriptionLive.text': function(newVal) {
+    if (newVal) {
+      // Ajouter le nouveau texte à la transcription accumulée
+      this.accumulatedTranscription += newVal + "\n";
+      }
+    },
+
+    accumulatedTranscription() {
+      // Défilement automatique du textarea vers le bas
+      this.$nextTick(() => {
+        const textarea = this.$refs.transcriptionArea;
+        if (textarea) {
+          textarea.scrollTop = textarea.scrollHeight;
+        }
+      });
     }
   },
+
+
   data() {
     return {
 
@@ -520,14 +554,12 @@ export default {
       maxHeight: 10,          // Nombre maximum de blocs dans la barre
       asciiVolumeBar: '',     // Contient la barre en ASCII
       analyser: null,
-      asciiSpectrogram: "", // Pour afficher le spectromètre en ASCII
-
-
-
+      asciiSpectrogram: "▁▁▁▁", // Pour afficher le spectromètre en ASCII
 
       switch1: true,
 
       transcriptionLive: { "text": "", "chunks": [ { "text": "", "timestamp": [ 0, 0.1 ] }] },
+      accumulatedTranscription: "", // Variable pour stocker la transcription accumulée
 
       audioBuffer: [],      // Tableau pour accumuler les données audio
       bufferDuration: 0,    // Durée accumulée en secondes
@@ -825,55 +857,56 @@ export default {
     },
 
     generateAsciiSpectrogram(dataArray) {
-    // Définir les bandes de fréquence intéressantes pour la voix humaine
-    const bands = [
-      { start: 0, end: 8, label: "20-100 Hz" }, // Basses fréquences
-      { start: 8, end: 16, label: "100-400 Hz" }, // Moyennes-basses
-      { start: 16, end: 32, label: "400-1000 Hz" }, // Moyennes
-      { start: 32, end: 64, label: "1000-4000 Hz" }, // Aigus
-    ];
+  // Définir les bandes de fréquence intéressantes pour la voix humaine
+  const bands = [
+    { start: 0, end: 8, label: "20-100 Hz" }, // Basses fréquences
+    { start: 8, end: 16, label: "100-400 Hz" }, // Moyennes-basses
+    { start: 16, end: 32, label: "400-1000 Hz" }, // Moyennes
+    { start: 32, end: 64, label: "1000-4000 Hz" }, // Aigus
+  ];
 
-    // Calculer l'intensité moyenne pour chaque bande
-    const intensities = bands.map((band) => {
-      let bandIntensity = 0;
-      for (let i = band.start; i < band.end; i++) {
-        bandIntensity += dataArray[i];
-      }
-      return bandIntensity / (band.end - band.start);
-    });
+  // Définir les caractères représentant les niveaux d'amplitude
+  const levels = ['▁', '▂', '▃', '▅', '▆', '▇'];
 
-    // Normaliser les valeurs entre 0 et 10
-    const normalizedIntensities = intensities.map((intensity) => Math.floor((intensity / 255) * 10));
+  let ascii = "";
 
-    let ascii = "";
+  // Pour chaque bande, calculer l'intensité moyenne et choisir le caractère correspondant
+  for (const band of bands) {
+    let bandIntensity = 0;
 
-    // Créer des barres verticales bien alignées
-    for (let level = 10; level > 0; level--) {
-      let line = "";
-      for (let i = 0; i < normalizedIntensities.length; i++) {
-        if (normalizedIntensities[i] >= level) {
-          const intensityRatio = (10 - level) / 9; // Normalisation entre 0 et 1 pour la couleur
-          const red = Math.floor(255 * intensityRatio);
-          const green = Math.floor(255 * (1 - intensityRatio));
-          const color = `rgb(${red}, ${green}, 0)`;
-
-          line += `<span style="color:${color}">█</span>`;
-        } else {
-          line += " "; // Ajouter un espace si le niveau est inférieur à la valeur de l'intensité
-        }
-      }
-      ascii += line + "\n"; // Ajouter la ligne au spectrogramme ASCII
+    // Calculer l'intensité moyenne de la bande
+    for (let i = band.start; i < band.end; i++) {
+      bandIntensity += dataArray[i];
     }
+    bandIntensity /= (band.end - band.start);
 
-    // Ajouter les labels des bandes de fréquence en bas
-    let labels = "";
-    for (let i = 0; i < bands.length; i++) {
-      labels += bands[i].label.padEnd(10, ' '); // Ajoute chaque étiquette avec un espace fixe pour l'alignement
-    }
-    ascii += labels;
+    // Normaliser la valeur entre 0 et le nombre de niveaux disponibles
+    const levelIndex = Math.min(
+      levels.length - 1, 
+      Math.floor((bandIntensity / 255) * (levels.length))
+    );
 
-    return ascii;
+    // Ajouter le caractère correspondant à l'intensité moyenne
+    ascii += levels[levelIndex];
+  }
+
+  return ascii;
+},
+
+
+  // Méthode 1: Utiliser la FFT pour calculer le niveau en dB
+  getDecibelLevelFromFFT() {
+      this.analyser.getByteFrequencyData(this.dataArray);
+      
+      // Calculer la moyenne des amplitudes
+      const average = this.dataArray.reduce((acc, val) => acc + val, 0) / this.bufferLength;
+      
+      // Convertir en dB (référence arbitraire à 0dB = amplitude maximale)
+      const db = 20 * Math.log10(average / 255);
+      
+      return Math.max(db, -100); // Limiter à -100dB minimum
   },
+
 
 
 

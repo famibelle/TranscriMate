@@ -7,11 +7,12 @@
     </div> -->
 
     <!-- Waveform visualization -->
-    <!-- <div class="waveform" :class="{ 'recording': isRecording }">
-      <template v-for="i in 7" :key="i">
-        {{ getWaveformBar(i) }}
-      </template>
-    </div> -->
+    <div class="waveform" :class="{ 'recording': isRecording }">
+      <div>
+        <!-- Afficher la variable asciiSpectrogram ici -->
+        <pre v-html="asciiSpectrogram"></pre>
+      </div>
+    </div>
 
     <!-- Controls -->
     <div class="controls">
@@ -26,6 +27,8 @@
 </template>
 
 <script>
+import { watchEffect } from 'vue';
+
 export default {
   name: 'Dictaphone',
   props: {
@@ -36,7 +39,11 @@ export default {
     audioLevel: {
       type: Number,
       default: 0
-    }
+    },
+    asciiSpectrogram: {
+      type: String,
+      required: true,
+    },
   },
   data() {
     return {
@@ -98,7 +105,8 @@ export default {
   padding: 20px;
   background: #f5f5f5;
   border-radius: 12px;
-  min-width: 300px;
+  /* min-width: 300px; */
+  max-width: 80%; /* Ajouté pour limiter la largeur maximale à 80% de la div parente */
 }
 
 .timer {

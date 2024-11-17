@@ -716,7 +716,7 @@ async def websocket_audio_receiver(websocket: WebSocket):
                     print("Silence")
                     await websocket.send_json({
                         'chunk_duration': 0,
-                        'transcription_live': {'text': "..."}
+                        'transcription_live': {'text': "...\n"}
                     })
 
                 # Supprimer le fichier temporaire après transcription
