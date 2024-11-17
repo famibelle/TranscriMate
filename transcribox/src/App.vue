@@ -230,16 +230,22 @@
                 <div class="record-button-wrapper">
                   <pre v-html="asciiSpectrogram" v-if="isRecording"></pre>
 
-                  <button @click.stop="toggleRecording" class="record-button"
+                  <!-- <button @click.stop="toggleRecording" class="record-button"
                     :class="{ 'record-button--recording': isRecording }"
                     :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
                     <span class="record-button__inner">🎙️</span>
-                  </button>
+                  </button> -->
 
                   <!-- Label sous le bouton -->
-                  <span class="record-button__label">
-                    {{ isRecording ? 'Stop' : 'Enregistrer la conversation directement' }}
-                  </span>
+                  <!-- <span class="recording-status">
+                    {{ isRecording ? 'STOP ■' : 'REC ●' }}
+                  </span> -->
+                  <Dictaphone 
+                    :is-recording="isRecording"
+                    :audio-level="audioLevel"
+                    @click.stop="toggleRecording"
+                  />
+
                 </div>
               </div>
 
@@ -250,7 +256,6 @@
               <div v-if="isRecording" class="recording-timer">
                 Enregistrement en cours: {{ formatTime(recordingTime) }}
                 <div>{{ transcriptionLive.text }}</div>
-
               </div>
 
               <!-- Section "Comment ça marche ?" pour guider l'utilisateur -->
@@ -484,6 +489,7 @@ import axios from 'axios';
 // import TaskToggle from './components/TaskToggle.vue'
 import CustomToggle from './components/CustomToggle.vue'
 import QuestionForm from './components/QuestionForm.vue'
+import Dictaphone from './components/Dictaphone.vue'
 
 
 
@@ -492,7 +498,7 @@ export default {
     // TaskToggle,
     CustomToggle,
     QuestionForm,
-    
+    Dictaphone
   },
 
   watch: {
@@ -819,56 +825,57 @@ export default {
     },
 
     generateAsciiSpectrogram(dataArray) {
-      // Définir les bandes de fréquence intéressantes pour la voix humaine
-      const bands = [
-        { start: 0, end: 8, label: "20-100 Hz" }, // Basses fréquences
-        { start: 8, end: 16, label: "100-400 Hz" }, // Moyennes-basses
-        { start: 16, end: 32, label: "400-1000 Hz" }, // Moyennes
-        { start: 32, end: 64, label: "1000-4000 Hz" }, // Aigus
-      ];
+    // Définir les bandes de fréquence intéressantes pour la voix humaine
+    const bands = [
+      { start: 0, end: 8, label: "20-100 Hz" }, // Basses fréquences
+      { start: 8, end: 16, label: "100-400 Hz" }, // Moyennes-basses
+      { start: 16, end: 32, label: "400-1000 Hz" }, // Moyennes
+      { start: 32, end: 64, label: "1000-4000 Hz" }, // Aigus
+    ];
 
-      let ascii = "";
+    // Calculer l'intensité moyenne pour chaque bande
+    const intensities = bands.map((band) => {
+      let bandIntensity = 0;
+      for (let i = band.start; i < band.end; i++) {
+        bandIntensity += dataArray[i];
+      }
+      return bandIntensity / (band.end - band.start);
+    });
 
-      // Pour chaque bande, créer une ligne de caractères ASCII avec la gamme de fréquence
-      for (const band of bands) {
-        let bandIntensity = 0;
+    // Normaliser les valeurs entre 0 et 10
+    const normalizedIntensities = intensities.map((intensity) => Math.floor((intensity / 255) * 10));
 
-        // Calculer l'intensité moyenne de la bande
-        for (let i = band.start; i < band.end; i++) {
-          bandIntensity += dataArray[i];
-        }
-        bandIntensity /= (band.end - band.start);
+    let ascii = "";
 
-        // Normaliser la valeur entre 0 et 10 (le nombre de `█` à afficher)
-        const numFullBlocks = Math.floor((bandIntensity / 255) * 10);
-        const numEmptyBlocks = 10 - numFullBlocks;
-
-        // Générer une barre avec des `█` avec un gradient de couleur
-        let fullBar = "";
-        for (let i = 0; i < numFullBlocks; i++) {
-          const intensityRatio = i / (10 - 1); // Normalisation entre 0 et 1
-          
-          // Calculer la couleur interpolée (du vert au rouge)
+    // Créer des barres verticales bien alignées
+    for (let level = 10; level > 0; level--) {
+      let line = "";
+      for (let i = 0; i < normalizedIntensities.length; i++) {
+        if (normalizedIntensities[i] >= level) {
+          const intensityRatio = (10 - level) / 9; // Normalisation entre 0 et 1 pour la couleur
           const red = Math.floor(255 * intensityRatio);
           const green = Math.floor(255 * (1 - intensityRatio));
           const color = `rgb(${red}, ${green}, 0)`;
 
-          // Ajouter le bloc avec la couleur
-          fullBar += `<span style="color:${color}">█</span>`;
+          line += `<span style="color:${color}">█</span>`;
+        } else {
+          line += " "; // Ajouter un espace si le niveau est inférieur à la valeur de l'intensité
         }
-
-        // Générer une partie vide avec des `▒` sans couleur
-        const emptyBar = " ".repeat(numEmptyBlocks);
-
-        // Créer la barre complète
-        const bar = `${fullBar}${emptyBar}`;
-
-        // Ajouter l'étiquette de la bande de fréquence et la barre
-        ascii += `${bar} ${band.label}\n`;
       }
+      ascii += line + "\n"; // Ajouter la ligne au spectrogramme ASCII
+    }
 
-      return ascii;
-    },
+    // Ajouter les labels des bandes de fréquence en bas
+    let labels = "";
+    for (let i = 0; i < bands.length; i++) {
+      labels += bands[i].label.padEnd(10, ' '); // Ajoute chaque étiquette avec un espace fixe pour l'alignement
+    }
+    ascii += labels;
+
+    return ascii;
+  },
+
+
 
     convertFloat32ToInt16(buffer) {
       const l = buffer.length;
@@ -2503,6 +2510,15 @@ ul {
   font-size: 1.125rem;
 }
 
+.recording-status {
+  color: red;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
 @keyframes pulse {
   0% {
     transform: scale(1);
@@ -2724,8 +2740,6 @@ pre {
   font-family: monospace, "Courier New", Courier, "Lucida Console", Consolas;
   white-space: pre;
   line-height: 1.2em;
-  text-align: left; /* Assurer l'alignement à gauche */
-
 }
 
 </style>
