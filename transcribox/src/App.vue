@@ -548,6 +548,8 @@ export default {
   data() {
     return {
 
+      initializedModels: false, // Indique si les modèles sont bien chargés
+
       activeTab: 'tab1', // Par défaut, l'onglet actif est le premier
 
       volumeHeight: 0,        // Niveau de volume (0 à 100)
@@ -626,6 +628,25 @@ export default {
     };
   },
 
+  async created() {
+    // Appeler /initialize/ avant que l'application ne soit affichée complètement
+    await this.initializeModels();
+
+    // Ajouter des écouteurs d'événements globaux pour détecter l'activité de l'utilisateur
+    window.addEventListener("mousemove", this.keepAlive);
+    window.addEventListener("click", this.keepAlive);
+    window.addEventListener("keydown", this.keepAlive);
+    window.addEventListener("touchstart", this.keepAlive);
+  },
+
+  beforeDestroy() {
+    // Supprimer les écouteurs d'événements pour éviter des fuites de mémoire
+    window.removeEventListener("mousemove", this.keepAlive);
+    window.removeEventListener("click", this.keepAlive);
+    window.removeEventListener("keydown", this.keepAlive);
+    window.removeEventListener("touchstart", this.keepAlive);
+  },
+
   computed: {
     isTranscriptionComplete() {
       return this.transcriptionProgress === 100;
@@ -643,6 +664,28 @@ export default {
   },
 
   methods: {
+    async initializeModels() {
+      try {
+        // Appeler l'endpoint /initialize/ pour charger les modèles au backend
+        const response = await axios.get("/initialize/");
+        console.log(response.data.message);
+        this.initializedModels = true; // Marquer comme initialisé une fois les modèles prêts
+      } catch (error) {
+        console.error("Erreur lors de l'initialisation des modèles :", error);
+        alert("Erreur lors de l'initialisation des modèles. Veuillez rafraîchir la page.");
+      }
+    },
+
+    async keepAlive() {
+      try {
+        // Appeler l'endpoint /keep_alive/ pour mettre à jour l'activité
+        await axios.get("/keep_alive/");
+      } catch (error) {
+        console.error("Erreur lors de la mise à jour de l'activité :", error);
+      }
+    },
+
+
     toggleTask() {
         // Basculer entre "translate" et "transcribe" en fonction de l'état du switch
         this.settings.task = this.settings.task === 'translate' ? 'transcribe' : 'translate';

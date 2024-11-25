@@ -17,6 +17,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, Request
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
+from contextlib import asynccontextmanager
 
 from starlette.websockets import WebSocketDisconnect
 
@@ -62,6 +63,9 @@ from moviepy.editor import *
 from pydub import AudioSegment
 from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 
+import threading
+import gc
+
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -99,6 +103,7 @@ else:
     print(f"Pas de GPU de disponible... Device: {device}")
 
 
+
 # Vérifier le type par défaut de tensor
 print(f"Type de donnée par défaut : {torch.get_default_dtype()}")
 
@@ -131,7 +136,6 @@ def load_pipeline_diarization(model):
 
     logging.info(f"Piepline Diarization déplacée sur {device}")
 
-
     return pipeline_diarization
 
 diarization_model = load_pipeline_diarization("pyannote/speaker-diarization-3.1")
@@ -153,34 +157,118 @@ model_selected  = [
 
 model_settings = current_settings.get("model", "openai/whisper-large-v3-turbo")  # Valeur par défaut si non définie
 
-Transcriber_Whisper = pipeline(
-        "automatic-speech-recognition",
-        # model = model_selected[0],
-        model = model_settings,
-        chunk_length_s=30,
-        # stride_length_s=(4, 2),
-        # torch_dtype="torch.float16",    
-        device=device
-    )
+# Initialisation des modèles à None
+Transcriber_Whisper = None
+Transcriber_Whisper_live = None
+last_activity_timestamp = None
+timeout_seconds = 600  # Timeout en secondes de 10 minutes d'inactivité
 
-Transcriber_Whisper_live = pipeline(
-        "automatic-speech-recognition",
-        model = "openai/whisper-medium",
-        chunk_length_s=30,
-        # stride_length_s=(4, 2),
-        # torch_dtype="torch.float16",    
-        device=device
-    )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Code de démarrage
+    def monitor_inactivity():
+        global last_activity_timestamp
+        while True:
+            if last_activity_timestamp and (time.time() - last_activity_timestamp > timeout_seconds):
+                print("Inactivité détectée. Déchargement des modèles...")
+                unload_models()
+                last_activity_timestamp = None
+            time.sleep(10)  # Vérifie toutes les 10 secondes
 
-# Si un GPU est disponible, convertir le modèle Whisper en FP16
-if device.type == "cuda":
-    model_post = Transcriber_Whisper.model
-    model_post = model_post.half()  # Convertir en FP16
-    Transcriber_Whisper.model = model_post  # Réassigner le modèle à la pipeline
+    # Démarrer le thread de surveillance d'inactivité
+    threading.Thread(target=monitor_inactivity, daemon=True).start()
 
-    model_live = Transcriber_Whisper_live.model
-    model_live = model_live.half()  # Convertir en FP16
-    Transcriber_Whisper_live.model = model_live  # Réassigner le modèle à la pipeline
+    yield
+
+    # Code d'arrêt
+    unload_models()
+
+# Créer l'application FastAPI avec le gestionnaire de contexte
+app = FastAPI(lifespan=lifespan)
+
+def load_models():
+    global Transcriber_Whisper, Transcriber_Whisper_live, last_activity_timestamp
+
+    if Transcriber_Whisper is None:
+        logging.info("Chargement du modèle Transcriber_Whisper...")
+        Transcriber_Whisper = pipeline(
+                "automatic-speech-recognition",
+                # model = model_selected[0],
+                model = model_settings,
+                chunk_length_s=30,
+                # stride_length_s=(4, 2),
+                # torch_dtype="torch.float16",    
+                device=device
+            )
+
+    if Transcriber_Whisper_live is None:
+        logging.info("Chargement du modèle Transcriber_Whisper_live...")
+        Transcriber_Whisper_live = pipeline(
+                "automatic-speech-recognition",
+                model = "openai/whisper-medium",
+                chunk_length_s=30,
+                # stride_length_s=(4, 2),
+                # torch_dtype="torch.float16",    
+                device=device
+            )
+
+    # Si un GPU est disponible, convertir le modèle Whisper en FP16
+    if device.type == "cuda":
+        model_post = Transcriber_Whisper.model
+        model_post = model_post.half()  # Convertir en FP16
+        Transcriber_Whisper.model = model_post  # Réassigner le modèle à la pipeline
+
+        model_live = Transcriber_Whisper_live.model
+        model_live = model_live.half()  # Convertir en FP16
+        Transcriber_Whisper_live.model = model_live  # Réassigner le modèle à la pipeline
+
+    # Mettre à jour le timestamp d'activité
+    last_activity_timestamp = time.time()
+
+
+# Charger les modèles à la demande via la route /initialize/
+@app.get("/initialize/")
+async def initialize_models():
+    load_models()
+    return {"message": "Modèles chargés avec succès"}
+
+@app.get("/keep_alive/")
+async def keep_alive():
+    global last_activity_timestamp, Transcriber_Whisper, Transcriber_Whisper_live
+
+    # Charger le modèle uniquement s'il n'est pas déjà chargé
+    if Transcriber_Whisper is None or Transcriber_Whisper_live is None:
+        load_models()
+
+    # Mettre à jour le timestamp d'activité chaque fois que le frontend fait un ping
+    last_activity_timestamp = time.time()
+    return {"message": "Timestamp d'activité mis à jour"}
+
+
+# Décharger les modèles pour économiser la mémoire
+def unload_models():
+    global Transcriber_Whisper, Transcriber_Whisper_live
+    if Transcriber_Whisper:
+        del Transcriber_Whisper
+        Transcriber_Whisper = None
+    if Transcriber_Whisper_live:
+        del Transcriber_Whisper_live
+        Transcriber_Whisper_live = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    print("Modèles déchargés pour économiser la mémoire.")
+
+# Surveiller l'inactivité pour décharger les modèles si nécessaire
+def monitor_inactivity():
+    global last_activity_timestamp
+    while True:
+        if last_activity_timestamp and (time.time() - last_activity_timestamp > timeout_seconds):
+            print("Inactivité détectée. Déchargement des modèles...")
+            unload_models()
+            last_activity_timestamp = None
+        time.sleep(10)  # Vérifie toutes les 10 secondes
+
 
 generate_kwargs_live = {
     "max_new_tokens": 224,  # Limiter la taille pour accélérer les prédictions en streaming.
@@ -203,7 +291,6 @@ generate_kwargs_aposteriori = {
 }
 
 
-app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     # allow_origins=["http://localhost:8080/"],  # URL de Vue.js
