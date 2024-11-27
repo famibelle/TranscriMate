@@ -103,13 +103,11 @@ else:
     print(f"Pas de GPU de disponible... Device: {device}")
 
 
-
 # Vérifier le type par défaut de tensor
 print(f"Type de donnée par défaut : {torch.get_default_dtype()}")
 
 # Vérifier la précision pour les calculs en FP16
 print(f"Disponibilité de la précision FP16 : {torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 0)}")
-
 
 # Initialisation de `current_settings` avec des valeurs par défaut
 # global current_settings
@@ -755,7 +753,6 @@ async def websocket_audio_receiver(websocket: WebSocket):
                 # Effectuer la détection
                 if speech_timestamps:
                     print("Speech détecté ...")
-
 
                     # Charger et préparer le fichier audio
                     waveform, sample_rate = torchaudio.load(tmp_file_path)

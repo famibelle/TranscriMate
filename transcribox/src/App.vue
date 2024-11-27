@@ -239,7 +239,6 @@
                   <Dictaphone 
                     :asciiSpectrogram="asciiSpectrogram"
                     :is-recording="isRecording"
-                    :audio-level="audioLevel"
                     @click.stop="toggleRecording"
                   />
 
