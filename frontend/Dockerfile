@@ -1,29 +1,32 @@
-# Étape 1 : Utiliser une image Node.js pour la construction
-FROM node:18 as build
+# Étape de build
+FROM node:18-alpine AS build-stage
 
 # Définir le répertoire de travail
 WORKDIR /app
 
-# Copier les fichiers package.json et package-lock.json
+# Copier les fichiers de définition de dépendances
 COPY package*.json ./
 
-# Installer les dépendances
-RUN npm install
+# Installer les dépendances en utilisant npm ci pour des builds plus rapides et déterministes
+RUN npm ci --silent
 
-# Copier tout le reste du projet
+# Copier tous les fichiers du projet
 COPY . .
 
-# Construire le projet pour la production
+# Build de l'application
 RUN npm run build
 
-# Étape 2 : Utiliser une image nginx pour servir les fichiers statiques
+# Étape de production
 FROM nginx:alpine
 
-# Copier les fichiers de build générés par l'étape précédente
-COPY --from=build /app/dist /usr/share/nginx/html
+# Copier la configuration Nginx personnalisée
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
-# Exposer le port utilisé par Nginx
-EXPOSE 8080
+# Copier les fichiers buildés de l'étape précédente
+COPY --from=build-stage /app/dist /usr/share/nginx/html
 
-# Démarrer Nginx
+# Configuration des ports et permissions
+EXPOSE 80
+
+# Commande par défaut
 CMD ["nginx", "-g", "daemon off;"]

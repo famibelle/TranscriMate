@@ -671,7 +671,6 @@ export default {
         this.initializedModels = true; // Marquer comme initialisé une fois les modèles prêts
       } catch (error) {
         console.error("Erreur lors de l'initialisation des modèles :", error);
-        alert("Erreur lors de l'initialisation des modèles. Veuillez rafraîchir la page.");
       }
     },
 
