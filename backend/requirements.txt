@@ -17,7 +17,7 @@ pyannote.pipeline==3.0.1
 pydantic==2.10.2
 pydub==0.25.1
 python-dotenv==1.0.1
-RAG==0.1.0
+# RAG==0.1.0
 rich==13.9.4
 silero_vad==5.1.2
 starlette==0.41.3
@@ -25,4 +25,8 @@ torch==2.5.0
 torchaudio==2.5.0
 tqdm==4.66.5
 transformers==4.46.1
-
+uvicorn
+sentence_transformers
+faiss-gpu
+python-multipart
+denoiser
