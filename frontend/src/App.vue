@@ -501,16 +501,16 @@
 
 import axios from 'axios';
 // import TaskToggle from './components/TaskToggle.vue'
-import CustomToggle from './components/CustomToggle.vue'
+//import CustomToggle from './components/CustomToggle.vue'
 import QuestionForm from './components/QuestionForm.vue'
-import Dictaphone from './components/Dictaphone.vue'
+import Dictaphone from './components/MyDictaphone.vue'
 
 
 
 export default {
   components: {
     // TaskToggle,
-    CustomToggle,
+    // CustomToggle,
     QuestionForm,
     Dictaphone
   },
@@ -638,7 +638,7 @@ export default {
     window.addEventListener("touchstart", this.keepAlive);
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     // Supprimer les écouteurs d'événements pour éviter des fuites de mémoire
     window.removeEventListener("mousemove", this.keepAlive);
     window.removeEventListener("click", this.keepAlive);
@@ -1044,7 +1044,7 @@ export default {
       this.onFileChange({ target: { files: [audioFile] } });
     },
 
-    beforeDestroy() {
+    beforeUnmount() {
       this.stopTimer();
      if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());

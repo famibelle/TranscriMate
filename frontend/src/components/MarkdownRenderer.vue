@@ -67,7 +67,7 @@ export default {
       }, this.typingSpeed); // Utilise la valeur de `typingSpeed` pour ajuster la vitesse
     }
   },
-  beforeDestroy() {
+  beforeUnmount() {
     // Nettoie l'intervalle lorsque le composant est détruit
     if (this.intervalId) clearInterval(this.intervalId);
   }

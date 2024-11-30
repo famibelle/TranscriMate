@@ -1,4 +1,4 @@
-<!-- Dictaphone.vue -->
+<!-- MyDictaphone.vue -->
 <template>
   <div class="dictaphone">
     <!-- Timer -->
@@ -27,10 +27,10 @@
 </template>
 
 <script>
-import { watchEffect } from 'vue';
+// import { watchEffect } from 'vue';
 
 export default {
-  name: 'Dictaphone',
+  name: 'MyDictaphone',
   props: {
     isRecording: {
       type: Boolean,
