@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from openai import OpenAI
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
@@ -29,8 +29,6 @@ from silero_vad import get_speech_timestamps, load_silero_vad, read_audio
 from starlette.websockets import WebSocketDisconnect
 
 # logging.basicConfig(level=logging.DEBUG)
-
-
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

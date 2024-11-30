@@ -1,5 +1,5 @@
 # Utilise une image Python légère
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # Définit le répertoire de travail dans le conteneur
 WORKDIR /app
@@ -8,6 +8,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Installe les dépendances avec pip
+# Mettre à jour pip avant d'installer les dépendances
+# RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copie tout le code de l'application
