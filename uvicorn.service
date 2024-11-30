@@ -1,0 +1,18 @@
+[Unit]
+Description=Uvicorn Service
+After=network.target
+
+[Service]
+WorkingDirectory=/home/azureuser/SourceCode/Transcription
+ExecStart=/home/azureuser/SourceCode/Transcription/.venv/bin/uvicorn backend.main:app --log-level debug --reload --host 127.0.0.1 --port 8000 --timeout-keep-alive 90
+
+Restart=always
+RestartSec=15
+Environment="PATH=/home/azureuser/SourceCode/Transcription/.venv/bin:/usr/bin:/usr/local/bin"
+Environment="PYTHONUNBUFFERED=1"  # Assure des logs sans buffer
+StandardOutput=journal  # Redirige la sortie vers le journal
+StandardError=journal   # Redirige les erreurs vers le journal
+
+
+[Install]
+WantedBy=default.target
