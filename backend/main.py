@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
-from moviepy import VideoFileClip
+from moviepy.editor import VideoFileClip
 from openai import OpenAI
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
@@ -73,9 +73,10 @@ os.environ['TRANSFORMERS_CACHE'] = HF_cache
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if torch.cuda.is_available():
-    print(f"GPU trouvé! on utilise CUDA. Device: {device}")
+    logging.info(f"GPU trouvé! on utilise CUDA. Device: {device}")
+
 else:
-    print(f"Pas de GPU de disponible... Device: {device}")
+    logging.info(f"Pas de GPU de disponible... Device: {device}")
 
 
 # Vérifier le type par défaut de tensor
@@ -173,6 +174,8 @@ def load_models():
                 # torch_dtype="torch.float16",    
                 device=device
             )
+        logging.info("Modèle Transcriber_Whisper chargé")
+
 
     if Transcriber_Whisper_live is None:
         logging.info("Chargement du modèle Transcriber_Whisper_live...")
@@ -184,6 +187,8 @@ def load_models():
                 # torch_dtype="torch.float16",    
                 device=device
             )
+        logging.info("Modèle Transcriber_Whisper_live chargé")
+
 
     # Si un GPU est disponible, convertir le modèle Whisper en FP16
     if device.type == "cuda":
@@ -202,6 +207,8 @@ def load_models():
 # Charger les modèles à la demande via la route /initialize/
 @app.get("/initialize/")
 async def initialize_models():
+    # yield {"message": "Modèles initialisation démarrée"}
+
     load_models()
     return {"message": "Modèles chargés avec succès"}
 
