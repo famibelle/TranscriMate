@@ -203,6 +203,12 @@ def load_models():
     # Mettre à jour le timestamp d'activité
     last_activity_timestamp = time.time()
 
+# Vérifie la dispo d'une GPU
+@app.get("/device_type/")
+async def device_type():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return {"device": device}
+
 
 # Charger les modèles à la demande via la route /initialize/
 @app.get("/initialize/")
