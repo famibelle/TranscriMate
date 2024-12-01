@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  labels:
+    app: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 8000       # Port exposé au sein du cluster
+      targetPort: 8000 # Port sur lequel le backend écoute dans le conteneur
