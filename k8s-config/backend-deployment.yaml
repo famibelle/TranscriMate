@@ -5,7 +5,7 @@ metadata:
   labels:
     app: backend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: backend
@@ -21,12 +21,12 @@ spec:
         - containerPort: 8000
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "500m"
             # nvidia.com/gpu: 1
           limits:
-            memory: "512Mi"
-            cpu: "1"
+            memory: "2048Mi"
+            cpu: "1000m"
             # nvidia.com/gpu: 1
       imagePullSecrets:
       - name: regcred
