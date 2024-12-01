@@ -27,6 +27,7 @@ tqdm==4.66.5
 transformers==4.46.1
 uvicorn
 sentence_transformers
-faiss-gpu
+faiss-cpu
 python-multipart
 denoiser
+websockets
