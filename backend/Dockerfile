@@ -1,6 +1,16 @@
 # Utilise une image Python légère
 FROM python:3.10-slim
 
+FROM nvidia/cuda:12.6.0-base-ubuntu22.04
+# Mettre à jour les paquets et installer ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg && apt-get clean
+
+# Étape 2 : Installer Python et pip
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    && apt-get clean
+    
 # Définit le répertoire de travail dans le conteneur
 WORKDIR /app
 
