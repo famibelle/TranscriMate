@@ -64,6 +64,26 @@ Limplémentation de la solution RAG pour AXA mobilise des experts en data scie
 - **3 Data Scientists Experts** sur une période de 12 mois, garantissant un déploiement optimal et une supervision continue de la solution.
 
 ---
+#### Cas d'Usage de la Solution
+1. Template automation
+2. Analyse de contrats
+3. Analyse de Verbatims
+4. Classifications de texte
+5. Rapports de risques
+6. Intelligence Economique
+7. Questions et Réponses sur rapports financiers
+8. Benchmarking des competitors du secteur de l'assurance (podcast, Questions aux investisseurs, rapports annuels, etc.)
+   1. Analyse comparative des Net Income, 
+   2. Gross Written Premium, 
+   3. Combined Ratio, 
+   4. Unit-Linked  
+   5. Non-Unit-Linked
+   6. Generation des Competitive Benchmarks
+9.  Copy writing: Rédaction de contenus optimisés pour le marketing ou la communication.
+10. Automatisation du Monthly Business Review
+11. Rédaction de l'URD (Universal Registration Document)
+
+
 
 ### Conclusion
 

@@ -24,11 +24,11 @@ Lutilisation doutils comme ChatGPT comporte des risques intrinsèques de fui
 
 ### Défi : Implémentation de lIA Générative dans un Environnement Réglementé
 
-Dans un secteur où la réglementation est particulièrement stricte, ladoption de lIA générative nécessite une isolation des données pour maintenir la confidentialité. Cette exigence disolation, bien qu'indispensable, limite la flexibilité et complexifie lintégration de lIA dans lensemble des applications de lentreprise. AXA utilise un espace sécurisé sur Azure pour cette solution, bien que cela introduise des défis en termes dévolutivité et de coordination inter-applications.
+Dans un secteur où la réglementation est particulièrement stricte, ladoption de l'IA générative nécessite une isolation des données pour maintenir la confidentialité. Cette exigence disolation, bien qu'indispensable, limite la flexibilité et complexifie lintégration de lIA dans lensemble des applications de lentreprise. AXA utilise un espace sécurisé sur Azure pour cette solution, bien que cela introduise des défis en termes dévolutivité et de coordination inter-applications.
 
 ### Approche : Engagement et Sensibilisation à lÉchelle Mondiale
 
-Pour faciliter ladoption de lIA générative et son intégration dans les processus métiers, AXA s'engage à éduquer et sensibiliser ses équipes globales aux enjeux et aux avantages de ces technologies. La solution "AXA Secure GPT" doit obtenir l'approbation de multiples comités de sécurité internes pour garantir sa conformité aux protocoles de protection des données et de cybersécurité de l'entreprise. Ce processus d'approbation rigoureux témoigne de l'engagement dAXA en matière de sécurité.
+Pour faciliter l'adoption de lIA générative et son intégration dans les processus métiers, AXA s'engage à éduquer et sensibiliser ses équipes globales aux enjeux et aux avantages de ces technologies. La solution "AXA Secure GPT" doit obtenir l'approbation de multiples comités de sécurité internes pour garantir sa conformité aux protocoles de protection des données et de cybersécurité de l'entreprise. Ce processus d'approbation rigoureux témoigne de l'engagement dAXA en matière de sécurité.
 
 ### Parcours des Données Sécurisé
 
