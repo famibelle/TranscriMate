@@ -57,8 +57,8 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY_MCF")
 server_url = os.getenv("SERVER_URL")
 
 # Dossier pour les transcriptions
-output_dir = "Transcriptions"
-os.makedirs(output_dir, exist_ok=True)
+# output_dir = "Transcriptions"
+# os.makedirs(output_dir, exist_ok=True)
 
 directories = [ "/mnt/Models", "/mnt/logs" , "/mnt/.cache"]
 for directory in directories:
@@ -77,6 +77,8 @@ if torch.cuda.is_available():
 
 else:
     logging.info(f"Pas de GPU de disponible... Device: {device}")
+
+
 
 
 # Vérifier le type par défaut de tensor
@@ -108,11 +110,13 @@ def load_pipeline_diarization(model):
     if torch.cuda.is_available():
         pipeline_diarization.to(torch.device("cuda"))
 
-    logging.info(f"Piepline Diarization déplacée sur {device}")
+    logging.info(f"Pipeline Diarization déplacée sur {device}")
 
     return pipeline_diarization
 
 diarization_model = load_pipeline_diarization("pyannote/speaker-diarization-3.1")
+# Charger le modèle Chocolatine
+
 
 model_selected  = [
         "openai/whisper-large-v3-turbo", #Hot
@@ -135,6 +139,7 @@ model_settings = current_settings.get("model", "openai/whisper-large-v3-turbo") 
 Transcriber_Whisper = None
 Transcriber_Whisper_live = None
 last_activity_timestamp = None
+Chocolatine = None
 timeout_seconds = 600  # Timeout en secondes de 10 minutes d'inactivité
 
 @asynccontextmanager
@@ -161,7 +166,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 def load_models():
-    global Transcriber_Whisper, Transcriber_Whisper_live, last_activity_timestamp
+    global Transcriber_Whisper, Transcriber_Whisper_live, last_activity_timestamp, Chocolatine
+
+    if Chocolatine is None:
+        logging.info("Chargement du modèle Chocolatine...")
+        Chocolatine = pipeline(
+            "text-generation", 
+            model="jpacifico/Chocolatine-2-14B-Instruct-v2.0",
+            device=device
+        )
+        logging.info("Modèle Chocolatine chargé")
+
 
     if Transcriber_Whisper is None:
         logging.info("Chargement du modèle Transcriber_Whisper...")
@@ -890,22 +905,27 @@ def process_audio_chunk(data):
 
 # Fonction pour exécuter la commande `ollama run` et obtenir la réponse du modèle
 def run_chocolatine_model(prompt):
-    command_3b = [
-        "ollama", "run", "jpacifico/chocolatine-3b",
-        prompt
-    ]
+    # command_3b = [
+    #     "ollama", "run", "jpacifico/chocolatine-3b",
+    #     prompt
+    # ]
 
-    command = [
-        "ollama" "run" "chocolatine-128k:latest",
-        prompt
-    ]
+    # command = [
+    #     "ollama" "run" "chocolatine-128k:latest",
+    #     prompt
+    # ]
 
+    # result = subprocess.run(command, capture_output=True, text=True)
+    # logging.info("Command output:", result.stdout)  # Affiche la sortie pour vérification
+    # logging.info("Command error:", result.stderr)  # Affiche les erreurs éventuelles
     
-    result = subprocess.run(command, capture_output=True, text=True)
-    logging.info("Command output:", result.stdout)  # Affiche la sortie pour vérification
-    logging.info("Command error:", result.stderr)  # Affiche les erreurs éventuelles
-
-    return result.stdout.strip()
+    messages = [
+        {"role": "user", "content": prompt},
+    ]
+    
+    response = Chocolatine(messages)
+    
+    return response
 
 # Modèle de données pour la requête POST
 class QuestionWithTranscription(BaseModel):
@@ -1021,7 +1041,7 @@ Voici la demande de l'utilisateur : {data.question}
 """
     
     prompt_gpt = [ 
-        {"role": "system", "content": "Vous êtes un assistant qui répond aux questions basées sur une transcription de conversation."},
+        {"role": "system", "content": "Vous êtes l'assistant AKABI qui répond aux questions basées sur une transcription de conversation."},
         {"role": "user", "content": f"Voici la transcription de la conversation :\n\n{data.transcription}"},
         {"role": "assistant", "content": "Les réponses doivent être au format markdown, avec les points importants en **gras**, les extraits pris dans la conversation en *italique* et **AKABI** sera toujours écrit en majuscule et en gras"},
         # {"role": "assistant", "content": "Les réponses doivent être formatées en texte brut (donc sans symbole markdown) parce que l'affichage coté frontend ne gère pas le markdown, pour une lecture agréable avec des retours à la ligne fréquents.  Utilisez uniquement les informations contenues dans la transcription pour répondre"},
@@ -1054,7 +1074,6 @@ Voici la demande de l'utilisateur : {data.question}
         return json_response
 
     else:
-
         if "AKABI" in (data.question).upper():  # pour ignorer la casse
             question_embedding = embedding_model.encode(data.question).astype("float32")
             # Recherche dans l'index FAISS
@@ -1064,7 +1083,7 @@ Voici la demande de l'utilisateur : {data.question}
             # Préparer le contexte pour la réponse GPT
             context = " ".join(relevant_texts)
             prompt_gpt.append({"role": "system", "content": f"Voici des cas d'usage réalisé chez AKABI: {context}"})
-            response = run_gpt4o_mini_streaming(prompt_gpt)
+            # response = run_gpt4o_mini_streaming(prompt_gpt)
 
         response = run_gpt4o_mini_streaming(prompt_gpt)
 
