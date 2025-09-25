@@ -145,7 +145,7 @@ Le frontend sera accessible sur http://localhost:8080
 2. Choisissez le modèle :
    - **OpenAI GPT** : GPT-4 pour des réponses de haute qualité
    - **Chocolatine 🍫🥖** : Modèle français local
-3. Posez vos questions sur AKABI ou analysez une transcription
+3. Posez vos questions
 
 ### 3. Transcription en temps réel
 
@@ -181,7 +181,7 @@ TranscriMate/
 │   ├── requirements.txt     # Dépendances Python
 │   ├── Dockerfile          # Configuration Docker backend
 │   └── Multimedia/
-│       └── Use_Cases/      # Base de connaissances AKABI
+│       └── Use_Cases/      # Base de connaissances au choix
 ├── frontend/
 │   ├── src/
 │   │   ├── App.vue         # Composant principal
@@ -252,7 +252,6 @@ docker-compose logs -f frontend
 - **CPU** : 8+ cœurs recommandés
 - **RAM** : 16GB minimum, 32GB recommandé
 - **GPU** : NVIDIA avec CUDA pour l'accélération
-- **Stockage** : SSD recommandé pour les gros fichiers
 
 ### Optimisations
 - Utilisez Docker avec `--gpus all` pour l'accélération GPU
@@ -271,13 +270,7 @@ docker-compose logs -f frontend
 
 Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 
-## 🙏 Remerciements
-
-- OpenAI pour Whisper et GPT-4
-- Pyannote pour la diarisation des locuteurs  
-- Hugging Face pour les modèles de transformers
-- L'équipe AKABI pour les cas d'usage
 
 ---
 
-**Développé avec ❤️ par l'équipe AKABI**
+**Développé avec ❤️ par l'équipe medhi**
