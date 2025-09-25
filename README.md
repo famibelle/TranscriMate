@@ -14,7 +14,7 @@ TranscriMate est une application de transcription audio/vidéo intelligente qui 
 ## 📋 Prérequis
 
 ### Backend
-- Python 3.10+
+- Python 3.11+
 - CUDA (recommandé pour les performances GPU)
 - ffmpeg installé sur le système
 
@@ -167,17 +167,53 @@ Le frontend sera accessible sur http://localhost:8080
 ### Paramètres système
 
 Le backend utilise automatiquement :
-- GPU CUDA si disponible (recommandé)
+- GPU CUDA si disponible (recommandé - 5-10x plus rapide)
 - CPU sinon (plus lent)
 - Gestion automatique de la mémoire avec déchargement des modèles après inactivité
 
-## 📁 Structure du projet
+### Performance GPU recommandée
+
+| GPU | VRAM | Modèle Whisper optimal | Performance |
+|-----|------|------------------------|-------------|
+| RTX 4090 | 24GB | large-v3 | 🚀 Excellent |
+| RTX 4080 | 16GB | large-v3 | 🚀 Excellent |
+| RTX 4070 | 12GB | large/medium | ✅ Très bon |
+| **RTX 4060** | **8GB** | **medium/base** | ✅ **Bon** |
+| RTX 3060 | 6GB | base/small | 🟡 Correct |
+| CPU seulement | - | tiny/base | 🐌 Lent |
+
+## � Documentation API
+
+La documentation complète de l'API est disponible dans [API_DOCUMENTATION.md](./API_DOCUMENTATION.md).
+
+### Interface Swagger
+Une fois le backend lancé, accédez à la documentation interactive :
+- **Swagger UI** : http://localhost:8000/docs
+- **ReDoc** : http://localhost:8000/redoc
+
+### Endpoints principaux
+
+| Endpoint | Méthode | Description |
+|----------|---------|-------------|
+| `/docs` | GET | Interface Swagger UI |
+| `/device_type/` | GET | Configuration GPU détaillée |
+| `/initialize/` | GET | Chargement des modèles IA |
+| `/uploadfile/` | POST | Transcription avec streaming |
+| `/diarization/` | POST | Séparation des locuteurs |
+| `/ask_question/` | POST | Questions IA sur transcription |
+| `/streaming_audio/` | WebSocket | Transcription temps réel |
+
+## �📁 Structure du projet
 
 ```
 TranscriMate/
 ├── backend/
 │   ├── main.py              # API FastAPI principale  
 │   ├── RAG.py               # Système de recherche pour AKABot
+│   ├── temp_manager.py      # Gestion fichiers cross-platform
+│   ├── check_gpu.py         # Vérification GPU et CUDA
+│   ├── test_gpu_models.py   # Tests de performance GPU
+│   ├── quick_gpu_test.py    # Test rapide configuration
 │   ├── requirements.txt     # Dépendances Python
 │   ├── Dockerfile          # Configuration Docker backend
 │   └── Multimedia/
@@ -189,16 +225,34 @@ TranscriMate/
 │   │   └── components/     # Composants Vue.js
 │   ├── package.json        # Dépendances Node.js
 │   └── Dockerfile         # Configuration Docker frontend
+├── API_DOCUMENTATION.md   # Documentation complète API
 ├── docker-compose.yaml    # Orchestration Docker
+├── dev_start.py           # Script démarrage développement
+├── simple_start.py        # Script démarrage simple  
 └── README.md             # Ce fichier
 ```
 
 ## 🛠️ Scripts utiles
 
-### Backend
+### Test GPU et Configuration
 ```bash
-# Vérifier l'état des modèles
+# Test rapide GPU
+python backend/quick_gpu_test.py
+
+# Test complet GPU et modèles
+python backend/check_gpu.py
+
+# Test performance modèles
+python backend/test_gpu_models.py
+```
+
+### Backend API
+```bash
+# Vérifier l'état des modèles et GPU
 curl http://localhost:8000/device_type/
+
+# Test rapide GPU via API
+curl http://localhost:8000/gpu_test/
 
 # Initialiser les modèles
 curl http://localhost:8000/initialize/
@@ -209,13 +263,13 @@ curl http://localhost:8000/keep_alive/
 
 ### Développement
 ```bash
-# Lancer les tests backend
+# Scripts de démarrage
+python dev_start.py        # Windows - démarrage développement
+python simple_start.py     # Cross-platform - démarrage simple
+
+# Tests et qualité code
 cd backend && python -m pytest
-
-# Linter frontend  
 cd frontend && npm run lint
-
-# Construire pour la production
 cd frontend && npm run build
 ```
 
@@ -273,4 +327,4 @@ Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 
 ---
 
-**Développé avec ❤️ par l'équipe medhi**
+**Développé avec ❤️ par medhi**
