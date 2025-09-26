@@ -10,6 +10,8 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Generator, Tuple
 
+from temp_manager import TempFileManager, async_temp_manager_context, async_temp_file_context
+
 import filetype
 import torch
 from dotenv import load_dotenv
@@ -47,26 +49,28 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 load_dotenv()
 
-TEMP_FOLDER = '/tmp/'
-HF_cache = '/mnt/.cache/'
-Model_dir = '/mnt/Models'
+# Configuration cross-platform des répertoires
+TEMP_FOLDER = tempfile.gettempdir()
+HF_cache = '/mnt/.cache/' if os.name != 'nt' else os.path.join(os.path.expanduser('~'), '.cache', 'huggingface')
+Model_dir = '/mnt/Models' if os.name != 'nt' else os.path.join(os.path.expanduser('~'), 'Models')
 
 HUGGING_FACE_KEY = os.environ.get("HuggingFace_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY_MCF")
 
 server_url = os.getenv("SERVER_URL")
 
-# Dossier pour les transcriptions
-# output_dir = "Transcriptions"
-# os.makedirs(output_dir, exist_ok=True)
-
-directories = [ "/mnt/Models", "/mnt/logs" , "/mnt/.cache"]
-for directory in directories:
-    if not os.path.exists(directory):
-        os.system(f"sudo mkdir {directory}")
-
-os.system("sudo chmod -R 755 /mnt/Models /mnt/.cache /mnt/logs")
-os.system("sudo chown -R $USER:$USER /mnt/Models /mnt/.cache /mnt/logs")
+# Configuration cross-platform des répertoires
+if os.name != 'nt':  # Unix/Linux
+    directories = ["/mnt/Models", "/mnt/logs", "/mnt/.cache"]
+    for directory in directories:
+        if not os.path.exists(directory):
+            os.system(f"sudo mkdir -p {directory}")
+    os.system("sudo chmod -R 755 /mnt/Models /mnt/.cache /mnt/logs")
+    os.system("sudo chown -R $USER:$USER /mnt/Models /mnt/.cache /mnt/logs")
+else:  # Windows
+    directories = [HF_cache, Model_dir, os.path.join(os.path.expanduser('~'), 'logs')]
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
 
 os.environ['HF_HOME'] = HF_cache
 os.environ['TRANSFORMERS_CACHE'] = HF_cache
@@ -163,7 +167,38 @@ async def lifespan(app: FastAPI):
     unload_models()
 
 # Créer l'application FastAPI avec le gestionnaire de contexte
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="TranscriMate API",
+    description="""
+    🎵 **API complète de transcription audio/vidéo avec IA**
+    
+    TranscriMate offre des fonctionnalités avancées de traitement audio :
+    
+    ## 🚀 **Fonctionnalités principales**
+    
+    * **🎯 Diarisation** - Séparation automatique des locuteurs
+    * **📝 Transcription** - Conversion audio vers texte avec Whisper
+    * **🔴 Temps réel** - Streaming WebSocket pour transcription live
+    * **🤖 IA** - Analyse des transcriptions avec Chocolatine/GPT
+    * **⚡ GPU** - Support CUDA pour performances optimales
+    
+    ## 🛠️ **Technologies**
+    
+    * PyTorch + CUDA pour performances GPU
+    * Whisper (OpenAI) pour transcription
+    * pyannote.audio pour diarisation
+    * Gestion cross-platform (Windows/Linux)
+    """,
+    version="1.0.0",
+    contact={
+        "name": "TranscriMate Support",
+        "email": "medhi@transcrimate.ai",
+    },
+    license_info={
+        "name": "MIT License",
+    },
+    lifespan=lifespan
+)
 
 def load_models():
     global Transcriber_Whisper, Transcriber_Whisper_live, last_activity_timestamp, Chocolatine
@@ -218,22 +253,217 @@ def load_models():
     # Mettre à jour le timestamp d'activité
     last_activity_timestamp = time.time()
 
-# Vérifie la dispo d'une GPU
-@app.get("/device_type/")
+# Vérifie la configuration GPU complète
+@app.get(
+    "/device_type/", 
+    tags=["🔧 Système"],
+    summary="Configuration GPU détaillée",
+    description="Retourne des informations complètes sur la configuration GPU/CPU et les recommandations d'optimisation"
+)
 async def device_type():
+    """
+    Endpoint amélioré pour vérifier la configuration GPU complète
+    Retourne des informations détaillées sur le GPU et PyTorch
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return {"device": device}
+    
+    gpu_info = {
+        "device": str(device),
+        "cuda_available": torch.cuda.is_available(),
+        "pytorch_version": torch.__version__,
+        "cuda_version": None,
+        "gpu_count": 0,
+        "current_gpu": None,
+        "gpu_details": [],
+        "memory_info": {},
+        "recommendations": []
+    }
+    
+    if torch.cuda.is_available():
+        gpu_info["cuda_version"] = torch.version.cuda
+        gpu_info["gpu_count"] = torch.cuda.device_count()
+        gpu_info["current_gpu"] = torch.cuda.current_device()
+        
+        # Informations détaillées pour chaque GPU
+        for i in range(torch.cuda.device_count()):
+            gpu_props = torch.cuda.get_device_properties(i)
+            gpu_detail = {
+                "id": i,
+                "name": gpu_props.name,
+                "memory_total_gb": round(gpu_props.total_memory / (1024**3), 2),
+                "compute_capability": f"{gpu_props.major}.{gpu_props.minor}",
+                "multi_processor_count": gpu_props.multi_processor_count
+            }
+            gpu_info["gpu_details"].append(gpu_detail)
+        
+        # Informations mémoire GPU actuelle
+        current_gpu = torch.cuda.current_device()
+        allocated_mb = torch.cuda.memory_allocated(current_gpu) / (1024**2)
+        reserved_mb = torch.cuda.memory_reserved(current_gpu) / (1024**2)
+        total_mb = torch.cuda.get_device_properties(current_gpu).total_memory / (1024**2)
+        
+        gpu_info["memory_info"] = {
+            "allocated_mb": round(allocated_mb, 2),
+            "reserved_mb": round(reserved_mb, 2),
+            "total_mb": round(total_mb, 2),
+            "usage_percent": round((allocated_mb / total_mb) * 100, 2)
+        }
+        
+        # Recommandations basées sur la configuration
+        main_gpu = gpu_info["gpu_details"][0]
+        if main_gpu["memory_total_gb"] >= 8:
+            gpu_info["recommendations"] = [
+                "GPU puissant détecté (≥8GB) - Modèles Whisper large recommandés",
+                "Traitement de longs fichiers audio possible",
+                "Diarisation en temps réel optimale"
+            ]
+        elif main_gpu["memory_total_gb"] >= 4:
+            gpu_info["recommendations"] = [
+                "GPU moyen détecté (4-8GB) - Modèles Whisper medium/base recommandés",
+                "Attention aux très longs fichiers audio"
+            ]
+        else:
+            gpu_info["recommendations"] = [
+                "GPU léger détecté (<4GB) - Modèles Whisper small/tiny recommandés",
+                "Traitement par segments recommandé"
+            ]
+            
+        # Vérification si PyTorch utilise bien CUDA
+        if "+cu" in torch.__version__:
+            gpu_info["pytorch_cuda_support"] = "✅ PyTorch CUDA activé"
+        else:
+            gpu_info["pytorch_cuda_support"] = "⚠️ PyTorch CPU uniquement - installer version CUDA"
+            
+    else:
+        gpu_info["recommendations"] = [
+            "Aucun GPU CUDA détecté",
+            "Modèles Whisper tiny/base pour de bonnes performances CPU",
+            "Traitement par petits segments recommandé"
+        ]
+        gpu_info["pytorch_cuda_support"] = "❌ CUDA non disponible"
+    
+    return gpu_info
+
+
+@app.get(
+    "/gpu_test/", 
+    tags=["🔧 Système"],
+    summary="Test de performance GPU",
+    description="Teste les performances GPU et vérifie que les modèles IA utilisent bien le GPU"
+)
+async def gpu_test():
+    """
+    Endpoint pour tester les performances GPU avec les modèles TranscriMate
+    """
+    if not torch.cuda.is_available():
+        return {
+            "status": "error", 
+            "message": "GPU non disponible",
+            "cuda_available": False
+        }
+    
+    try:
+        # Test basique GPU
+        device = torch.device("cuda")
+        
+        # Test de multiplication matricielle
+        start_time = time.time()
+        a = torch.randn(1000, 1000, device=device)
+        b = torch.randn(1000, 1000, device=device)
+        c = torch.mm(a, b)
+        torch.cuda.synchronize()
+        gpu_test_time = time.time() - start_time
+        
+        # Informations mémoire après test
+        allocated_mb = torch.cuda.memory_allocated() / (1024**2)
+        reserved_mb = torch.cuda.memory_reserved() / (1024**2)
+        
+        # Test des modèles si chargés
+        models_status = {}
+        
+        if 'diarization_model' in globals() and diarization_model is not None:
+            try:
+                # Vérifier sur quel device est le modèle de diarisation
+                # Le modèle pyannote utilise automatiquement CUDA s'il est disponible
+                models_status["diarization"] = {
+                    "loaded": True,
+                    "device": "cuda" if torch.cuda.is_available() else "cpu",
+                    "status": "✅ Modèle pyannote sur GPU"
+                }
+            except Exception as e:
+                models_status["diarization"] = {
+                    "loaded": True,
+                    "error": str(e)
+                }
+        else:
+            models_status["diarization"] = {"loaded": False}
+            
+        if Transcriber_Whisper is not None:
+            try:
+                # Vérifier le device du modèle Whisper
+                model_device = str(Transcriber_Whisper.device)
+                models_status["whisper"] = {
+                    "loaded": True,
+                    "device": model_device,
+                    "model": model_settings,
+                    "status": f"✅ Whisper sur {model_device}"
+                }
+            except Exception as e:
+                models_status["whisper"] = {
+                    "loaded": True,
+                    "error": str(e)
+                }
+        else:
+            models_status["whisper"] = {"loaded": False}
+            
+        # Nettoyer la mémoire de test
+        del a, b, c
+        torch.cuda.empty_cache()
+        
+        return {
+            "status": "success",
+            "cuda_available": True,
+            "gpu_test_time_ms": round(gpu_test_time * 1000, 2),
+            "memory_after_test": {
+                "allocated_mb": round(allocated_mb, 2),
+                "reserved_mb": round(reserved_mb, 2)
+            },
+            "models_status": models_status,
+            "gpu_name": torch.cuda.get_device_name(),
+            "recommendations": [
+                "GPU fonctionnel pour les calculs PyTorch",
+                "Chargez vos modèles avec /initialize/ pour les tester sur GPU",
+                "Utilisez /device_type/ pour plus de détails"
+            ]
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Erreur lors du test GPU: {str(e)}",
+            "cuda_available": torch.cuda.is_available()
+        }
 
 
 # Charger les modèles à la demande via la route /initialize/
-@app.get("/initialize/")
+@app.get(
+    "/initialize/", 
+    tags=["🔧 Système"],
+    summary="Chargement des modèles IA",
+    description="Charge tous les modèles IA (Whisper, pyannote, Chocolatine) en mémoire GPU/CPU"
+)
 async def initialize_models():
     # yield {"message": "Modèles initialisation démarrée"}
 
     load_models()
     return {"message": "Modèles chargés avec succès"}
 
-@app.get("/keep_alive/")
+@app.get(
+    "/keep_alive/", 
+    tags=["🔧 Système"],
+    summary="Maintien de session",
+    description="Met à jour le timestamp d'activité pour éviter le déchargement automatique des modèles"
+)
 async def keep_alive():
     global last_activity_timestamp, Transcriber_Whisper, Transcriber_Whisper_live
 
@@ -302,21 +532,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/diarization/")
+@app.post(
+    "/diarization/", 
+    tags=["🎵 Audio"],
+    summary="Diarisation (séparation des locuteurs)",
+    description="Analyse un fichier audio/vidéo pour identifier et séparer les différents locuteurs sans transcription"
+)
 async def upload_file(file: UploadFile = File(...)):
-    file_path = f"/tmp/{file.filename}"
+    # Vérifier et initialiser les modèles si nécessaire
+    global diarization_model
+    if diarization_model is None:
+        logging.info("Initialisation des modèles pour diarization...")
+        await load_models()
+        
+        # Vérifier que l'initialisation a réussi
+        if diarization_model is None:
+            logging.error("Échec de l'initialisation du modèle de diarisation")
+            raise HTTPException(status_code=500, detail="Impossible d'initialiser le modèle de diarisation. Vérifiez les logs serveur.")
+    
+    async with async_temp_manager_context("diarization") as temp_manager:
+        # Lire le fichier uploadé
+        file_data = await file.read()
+        file_path = temp_manager.create_temp_file(file.filename, file_data)
 
-    full_transcription_text = "\n"
+        full_transcription_text = "\n"
 
-    # Détection de l'extension du fichier
-    file_extension = os.path.splitext(file_path)[1].lower()
-    logging.info(f"Extension détectée {file_extension}.")
-
-    try:
-        # Sauvegarder temporairement le fichier uploadé
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+        # Détection de l'extension du fichier (sécurisée)
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        logging.info(f"Extension détectée {file_extension}.")
         logging.info(f"Fichier {file.filename} sauvegardé avec succès.")
+        
         # Si le fichier est un fichier audio (formats courants)
         if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
             logging.info(f"fichier audio détecté: {file_extension}.")
@@ -333,7 +578,8 @@ async def upload_file(file: UploadFile = File(...)):
         audio = audio.set_channels(1)
         audio = audio.set_frame_rate(16000)
         
-        audio_path = f"{file_path}.wav"
+        # Créer un chemin pour le fichier audio converti
+        audio_path = temp_manager.get_temp_path_with_suffix(".wav")
         
         logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
 
@@ -349,17 +595,9 @@ async def upload_file(file: UploadFile = File(...)):
             diarization = diarization_model(audio_path, hook=hook)
             logging.debug(f"Diarization terminée {diarization}")
 
-
         diarization_json = convert_tracks_to_json(diarization)
         logging.debug(f"Résultat de la diarization {diarization_json}")
         return diarization_json
-        
-    finally:
-        logging.info(f"->> fin de diarization <<")
-        # Nettoyage : supprimer le fichier temporaire après traitement
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            logging.info(f"Fichier temporaire {file_path} supprimé.")
 
 
 class Settings(BaseModel):
@@ -392,7 +630,12 @@ class Settings(BaseModel):
             raise ValueError("Language must be 'fr', 'en', or 'auto'")
 
 
-@app.post("/settings/")
+@app.post(
+    "/settings/", 
+    tags=["⚙️ Configuration"],
+    summary="Mise à jour des paramètres",
+    description="Configure les paramètres de transcription : modèle Whisper, langue, tâche (transcription/traduction)"
+)
 def update_settings(settings: Settings):
     global current_settings
     # Logique de mise à jour des paramètres côté backend
@@ -403,21 +646,36 @@ def update_settings(settings: Settings):
     return {"message": "Paramètres mis à jour avec succès"}
 
 
-@app.post("/uploadfile/")
-async def upload_file(file: UploadFile = File(...)):
-    file_path = f"/tmp/{file.filename}"
-    # Détection de l'extension du fichier
-    file_extension = os.path.splitext(file_path)[1].lower()
-    logging.info(f"Extension détectée {file_extension}.")
+@app.post(
+    "/uploadfile/", 
+    tags=["🎵 Audio"],
+    summary="Transcription complète avec streaming",
+    description="Traitement complet : diarisation + transcription avec retour en temps réel (Server-Sent Events)"
+)
+async def upload_file_streaming(file: UploadFile = File(...)):
+    # Vérifier et initialiser les modèles si nécessaire
+    global Transcriber_Whisper, diarization_model
+    if Transcriber_Whisper is None or diarization_model is None:
+        logging.info("Initialisation des modèles pour uploadfile...")
+        await load_models()
+        
+        # Vérifier que l'initialisation a réussi
+        if Transcriber_Whisper is None or diarization_model is None:
+            logging.error("Échec de l'initialisation des modèles")
+            raise HTTPException(status_code=500, detail="Impossible d'initialiser les modèles. Vérifiez les logs serveur.")
+    
+    async with async_temp_manager_context("uploadfile") as temp_manager:
+        # Lire le fichier uploadé
+        file_data = await file.read()
+        file_path = temp_manager.create_temp_file(file.filename, file_data)
+        
+        # Détection de l'extension du fichier (sécurisée)
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        logging.info(f"Extension détectée {file_extension}.")
 
-    # Utilise les paramètres de transcription
-    task = current_settings.get("transcribe")  # Prend la valeur par défaut si non définie
+        # Utilise les paramètres de transcription
+        task = current_settings.get("transcribe")  # Prend la valeur par défaut si non définie
 
-
-    try:
-        # Sauvegarder temporairement le fichier uploadé
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
         logging.info(f"Fichier {file.filename} sauvegardé avec succès.")
 
         file_type = filetype.guess(file_path)
@@ -430,7 +688,14 @@ async def upload_file(file: UploadFile = File(...)):
             logging.info(f"fichier audio détecté: {file_extension}.")
 
             audio = AudioSegment.from_file(file_path)
-
+            
+            logging.info(f"Conversion du {file.filename} en mono 16kHz.")
+            audio = audio.set_channels(1)
+            audio = audio.set_frame_rate(16000)
+            # Créer un chemin pour le fichier audio converti
+            audio_path = temp_manager.get_temp_path_with_suffix(".wav")
+            logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
+            audio.export(audio_path, format="wav")
 
         elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
             logging.info(f"fichier vidéo détecté: {file_extension}.")
@@ -443,12 +708,18 @@ async def upload_file(file: UploadFile = File(...)):
 
             logging.info(extraction_status)
 
-        logging.info(f"Conversion du {file.filename} en mono 16kHz.")
-        audio = audio.set_channels(1)
-        audio = audio.set_frame_rate(16000)
-        audio_path = f"{file_path}.wav"
-        logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
-        audio.export(audio_path, format="wav")
+            logging.info(f"Conversion du {file.filename} en mono 16kHz.")
+            audio = audio.set_channels(1)
+            audio = audio.set_frame_rate(16000)
+            # Créer un chemin pour le fichier audio converti
+            audio_path = temp_manager.get_temp_path_with_suffix(".wav")
+            logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
+            audio.export(audio_path, format="wav")
+            
+        else:
+            # Format de fichier non supporté
+            logging.error(f"Format de fichier non supporté: {file_extension}")
+            raise HTTPException(status_code=400, detail=f"Format de fichier non supporté: {file_extension}. Formats supportés: .mp3, .wav, .aac, .ogg, .flac, .m4a, .mp4, .mov, .3gp, .mkv")
 
         # Vérification si le fichier existe
         if not os.path.exists(audio_path):
@@ -524,7 +795,7 @@ async def upload_file(file: UploadFile = File(...)):
                 segment_audio = audio[start_ms:end_ms]
 
                 # Sauvegarder le segment temporairement pour Whisper
-                segment_path = f"/tmp/segment_{start_ms}_{end_ms}.wav"
+                segment_path = temp_manager.get_temp_path_with_suffix(".wav")
                 segment_audio.export(segment_path, format="wav")
 
                 logging.info(f"----> Transcription démarée avec le model <{model_settings}> et la task <{task}> <----")
@@ -580,57 +851,75 @@ async def upload_file(file: UploadFile = File(...)):
         logging.info(full_transcription)
         return StreamingResponse(live_process_audio(), media_type="application/json")
 
-
-    finally:
-        logging.info(f"->> fin de transcription <<")
-        logging.info(full_transcription)
-
-        # Nettoyage : supprimer le fichier temporaire après traitement
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            logging.info(f"Fichier temporaire {file_path} supprimé.")
+        # Le nettoyage est automatique avec async_temp_manager_context
 
 
 # Endpoint pour générer les URLs des segments audio
-@app.get("/generate_audio_url/{filename}")
+@app.get(
+    "/generate_audio_url/{filename}", 
+    tags=["📁 Fichiers"],
+    summary="Génération d'URL audio",
+    description="Génère l'URL d'accès pour un segment audio spécifique"
+)
 def generate_audio_url(filename: str):
     return {"url": f"{server_url}/segment_audio/{filename}"}
 
 # Endpoint pour servir les segments audio
-@app.get("/segment_audio/{filename}")
+@app.get(
+    "/segment_audio/{filename}", 
+    tags=["📁 Fichiers"],
+    summary="Téléchargement segment audio",
+    description="Télécharge directement un segment audio généré lors de la transcription"
+)
 async def get_segment_audio(filename: str):
-    file_path = f"/tmp/{filename}"
+    # Utiliser le répertoire temporaire système de manière cross-platform
+    file_path = os.path.join(tempfile.gettempdir(), filename)
     if os.path.exists(file_path):
         return FileResponse(file_path)
     else:
         return {"error": "Fichier non trouvé"}
 
-@app.post("/process_audio/")
+@app.post(
+    "/process_audio/", 
+    tags=["🎵 Audio"],
+    summary="Traitement audio standard",
+    description="Traitement complet audio/vidéo avec diarisation et transcription (sans streaming)"
+)
 async def process_audio(file: UploadFile = File(...)):
-    file_path = f"/tmp/{file.filename}"
-
-    # Détection de l'extension du fichier
-    file_extension = os.path.splitext(file_path)[1].lower()
-
-    # Si le fichier est un fichier audio (formats courants)
-    if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
-        # Charger le fichier audio avec Pydub
-        audio = AudioSegment.from_file(file_path)
-
-    elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
-        VideoFileClip(file_path)
-        audio = AudioSegment.from_file(file_path, format=file.filename)
-
-    audio = audio.set_channels(1)
-    audio = audio.set_frame_rate(16000)
+    # Vérifier et initialiser les modèles si nécessaire
+    global Transcriber_Whisper
+    if Transcriber_Whisper is None:
+        logging.info("Initialisation des modèles pour process_audio...")
+        await load_models()
+        
+        # Vérifier que l'initialisation a réussi
+        if Transcriber_Whisper is None:
+            logging.error("Échec de l'initialisation du modèle Transcriber_Whisper")
+            raise HTTPException(status_code=500, detail="Impossible d'initialiser les modèles de transcription. Vérifiez les logs serveur.")
     
-    audio_path = f"{file_path}.wav"
+    async with async_temp_manager_context("process_audio") as temp_manager:
+        # Lire le fichier uploadé
+        file_data = await file.read()
+        file_path = temp_manager.create_temp_file(file.filename, file_data)
 
-    audio.export(audio_path, format="wav")
+        # Détection de l'extension du fichier
+        file_extension = os.path.splitext(file.filename)[1].lower()
 
-    try:
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+        # Si le fichier est un fichier audio (formats courants)
+        if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
+            # Charger le fichier audio avec Pydub
+            audio = AudioSegment.from_file(file_path)
+
+        elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
+            VideoFileClip(file_path)
+            audio = AudioSegment.from_file(file_path, format=file_extension)
+
+        audio = audio.set_channels(1)
+        audio = audio.set_frame_rate(16000)
+        
+        # Créer un chemin pour le fichier audio converti
+        audio_path = temp_manager.get_temp_path_with_suffix(".wav")
+        audio.export(audio_path, format="wav")
 
         logging.info(f"Fichier {file.filename} sauvegardé avec succès.")
         
@@ -656,7 +945,7 @@ async def process_audio(file: UploadFile = File(...)):
             segment_audio = audio[start_ms:end_ms]
 
             # Sauvegarder le segment temporairement pour Whisper
-            segment_path = f"/tmp/segment_{start_ms}_{end_ms}.wav"
+            segment_path = temp_manager.get_temp_path_with_suffix(".wav")
             segment_audio.export(segment_path, format="wav")
 
             # Transcrire ce segment avec Whisper
@@ -675,15 +964,10 @@ async def process_audio(file: UploadFile = File(...)):
                 "start_time": turn.start,
                 "end_time": turn.end
             })
-        logging.info("Transcription terminée.")
+            logging.info("Transcription terminée.")
 
         return {"transcriptions": segments}
-
-    finally:
-        # Nettoyage : supprimer le fichier temporaire après traitement
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-            logging.info(f"Fichier temporaire {audio_path} supprimé.")
+        # Le nettoyage est automatique avec async_temp_manager_context
 
 
 import torchaudio
@@ -768,8 +1052,8 @@ async def websocket_audio_receiver(websocket: WebSocket):
                     # Appliquer la suppression de bruit
                     denoised_waveform = model_denoiser(waveform[None])[0]
 
-                    # Déplacer les données nettoyées sur le CPU pour les sauvegarder
-                    denoised_waveform = denoised_waveform.cpu()
+                    # Déplacer les données nettoyées sur le CPU pour les sauvegarder (détacher du graphe de calcul)
+                    denoised_waveform = denoised_waveform.detach().cpu()
 
                     # Sauvegarder le fichier audio nettoyé
                     torchaudio.save(tmp_file_path, denoised_waveform, model_denoiser.sample_rate)
@@ -783,6 +1067,10 @@ async def websocket_audio_receiver(websocket: WebSocket):
                         generate_kwargs={
                             "return_timestamps": False
                         }
+
+                    # S'assurer que le modèle est chargé
+                    if Transcriber_Whisper_live is None:
+                        load_models()
 
                     transcription_live = Transcriber_Whisper_live(
                         tmp_file_path,
@@ -1023,7 +1311,12 @@ def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Route POST pour le streaming
-@app.post("/ask_question/")
+@app.post(
+    "/ask_question/", 
+    tags=["🤖 Intelligence Artificielle"],
+    summary="Questions sur transcription",
+    description="Pose des questions sur une transcription avec les modèles IA (Chocolatine local ou GPT-4o-mini)"
+)
 async def ask_question(data: QuestionWithTranscription):
     # Crée le prompt pour le modèle à partir de la question et de la transcription
     prompt_chocolatine = f""" 
