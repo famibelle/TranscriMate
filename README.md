@@ -7,7 +7,7 @@ TranscriMate est une application de transcription audio/vidéo intelligente qui 
 - **Transcription audio/vidéo** : Conversion automatique de fichiers audio et vidéo en texte
 - **Séparation des locuteurs** : Identification et séparation automatique des différentes voix
 - **Traduction** : Traduction automatique vers l'anglais
-- **Chatbot IA** : Interaction avec les transcriptions via AKABot (GPT-4 ou Chocolatine)
+- **Chatbot IA** : Interaction avec les transcriptions via RAG (GPT-4 ou Chocolatine)
 - **Transcription en temps réel** : Enregistrement et transcription live via microphone
 - **Interface moderne** : Interface web responsive avec mode sombre/clair
 
@@ -139,9 +139,9 @@ Le frontend sera accessible sur http://localhost:8080
 4. Attendez le traitement automatique (extraction audio → séparation des voix → transcription)
 5. Consultez les résultats par locuteur et copiez la transcription complète
 
-### 2. Chatbot AKABot
+### 2. ChatBot 
 
-1. Accédez à l'onglet **AKABot 🤖**
+1. Accédez à l'onglet **ChatBot 🤖**
 2. Choisissez le modèle :
    - **OpenAI GPT** : GPT-4 pour des réponses de haute qualité
    - **Chocolatine 🍫🥖** : Modèle français local
@@ -209,7 +209,7 @@ Une fois le backend lancé, accédez à la documentation interactive :
 TranscriMate/
 ├── backend/
 │   ├── main.py              # API FastAPI principale  
-│   ├── RAG.py               # Système de recherche pour AKABot
+│   ├── RAG.py               # Système de recherche via RAG
 │   ├── temp_manager.py      # Gestion fichiers cross-platform
 │   ├── check_gpu.py         # Vérification GPU et CUDA
 │   ├── test_gpu_models.py   # Tests de performance GPU
