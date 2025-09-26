@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Volume pour les fichiers uploadés si nécessaire
+      - ./backend/uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - app-network
+    # Ajouter des variables d'environnement si nécessaire
+    # env_file:
+    #   - .env
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - VUE_APP_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  uploads:
+    driver: local
