@@ -5,26 +5,49 @@
       <div class="tabs-container">
         <div class="tabs-header">
 
-          <button @click="activeTab = 'tab1'" :class="['tab-button', { active: activeTab === 'tab1' }]">
-            <span class="tab-title">Trancription 🎙️</span>
+          <button @click="activeTab = 'streaming'" :class="['tab-button', { active: activeTab === 'streaming' }]">
+            <span class="tab-title">🔄 Mode Streaming</span>
+            <span class="tab-subtitle">Upload + Affichage Progressif</span>
           </button>
 
-          <button @click="activeTab = 'tab2'" :class="['tab-button', { active: activeTab === 'tab2' }]">
-            <span class="tab-title">AKABot 🤖</span>
+          <button @click="activeTab = 'live'" :class="['tab-button', { active: activeTab === 'live' }]">
+            <span class="tab-title">🎤 Mode Live</span>
+            <span class="tab-subtitle">Microphone Temps Réel</span>
           </button>
 
-          <button @click="activeTab = 'tab3'" :class="['tab-button', { active: activeTab === 'tab3' }]">
-            <span class="tab-title">Traduction 🗣️</span>
+          <button @click="activeTab = 'chatbot'" :class="['tab-button', { active: activeTab === 'chatbot' }]">
+            <span class="tab-title">🤖 AKABot</span>
+            <span class="tab-subtitle">IA Assistant</span>
+          </button>
+
+          <button @click="openSwaggerAPI" class="tab-button api-button">
+            <span class="tab-title">� API Simple</span>
+            <span class="tab-subtitle">Swagger/Développeurs</span>
           </button>
 
         </div>
 
         <div class="tab-content">
 
-          <!-- Contenu du premier onglet -->
-          <div v-if="activeTab === 'tab1'">
-            <!-- Vue principale affichée après l'upload du fichier -->
-            <div v-if="file">
+          <!-- MODE STREAMING : Upload fichier + Affichage progressif -->
+          <div v-if="activeTab === 'streaming'">
+            <div class="streaming-mode-container">
+              <!-- Header du mode streaming -->
+              <div class="stats-container" v-if="!file">
+                <div class="stats-header">🔄 Mode Streaming - Transcription Progressive</div>
+                <div class="stats-body">
+                  <p>Upload de fichier avec affichage des segments en temps réel</p>
+                  <div class="mode-features">
+                    <span class="feature">📁 Upload fichier</span>
+                    <span class="feature">🎯 Diarisation complète</span>
+                    <span class="feature">📝 Affichage progressif</span>
+                    <span class="feature">⚡ Server-Sent Events</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Vue principale affichée après l'upload du fichier -->
+              <div v-if="file">
               <!-- Section fichier -->
               <div class="file-container">
                 <div class="file-header">📁 Fichier
@@ -311,17 +334,104 @@
                 </div>
               </div>
             </div>
+            </div> <!-- Fermeture streaming-mode-container -->
           </div>
 
-          <div v-if="activeTab === 'tab2'">
-            <div id="app" class="page-container">
-
+          <!-- MODE LIVE : Microphone temps réel -->
+          <div v-if="activeTab === 'live'">
+            <div class="live-mode-container">
+              <!-- Header du mode live -->
               <div class="stats-container">
-                <div class="stats-header">🤖 AKAbot</div>
-                <div class="stats-body"></div>
-                <div id="app">
-                  <QuestionForm :defaultQuestion="'Que fait AKABI en IA?'" :fullTranscription="fullTranscription"
-                    :chat_model="settings.chat_model" />
+                <div class="stats-header">🎤 Mode Live - Transcription Temps Réel</div>
+                <div class="stats-body">
+                  <p>Transcription directe depuis votre microphone en temps réel</p>
+                  <div class="mode-features">
+                    <span class="feature">✅ Transcription instantanée</span>
+                    <span class="feature">⚡ Faible latence</span>
+                    <span class="feature">🔄 Flux continu</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Interface microphone temps réel -->
+              <div class="live-recording-container">
+                <div class="record-button-wrapper">
+                  <Dictaphone 
+                    :isRecording="isRecording"
+                    :recordingTime="recordingTime"
+                    :transcriptionLive="transcriptionLive"
+                    @toggleRecording="toggleRecording"
+                  />
+                </div>
+
+                <!-- Affichage temps d'enregistrement -->
+                <div v-if="isRecording" class="recording-timer">
+                  Enregistrement en cours: {{ formatTime(recordingTime) }}
+                  <div class="live-spectrogram">{{ asciiSpectrogram }}</div>
+                </div>
+
+                <!-- Transcription live accumulée -->
+                <div class="transcription-live-container">
+                  <div class="transcription-header">💬 Transcription Live</div>
+                  <textarea 
+                    ref="transcriptionArea" 
+                    v-model="accumulatedTranscription" 
+                    class="transcription-textarea live-textarea" 
+                    readonly
+                    placeholder="Commencez à parler pour voir la transcription apparaître...">
+                  </textarea>
+                </div>
+              </div>
+
+              <!-- Paramètres du mode live -->
+              <div class="stats-container">
+                <div class="stats-header">⚙️ Paramètres Mode Live</div>
+                <div class="settings-modal">
+                  <div class="setting-item">
+                    <label>Langue:</label>
+                    <select v-model="settings.lang">
+                      <option value="auto">Auto-détection</option>
+                      <option value="fr">Français</option>
+                      <option value="en">Anglais</option>
+                    </select>
+                  </div>
+                  <div class="setting-item">
+                    <label>Mode:</label>
+                    <select v-model="settings.task">
+                      <option value="transcribe">Transcription</option>
+                      <option value="translate">Traduction (vers anglais)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MODE CHATBOT : Assistant IA -->
+          <div v-if="activeTab === 'chatbot'">
+            <div class="chatbot-mode-container">
+              <!-- Header du mode chatbot -->
+              <div class="stats-container">
+                <div class="stats-header">🤖 AKAbot - Assistant IA</div>
+                <div class="stats-body">
+                  <p>Posez vos questions sur les transcriptions ou sur AKABI</p>
+                  <div class="mode-features">
+                    <span class="feature">🧠 IA Chocolatine & GPT</span>
+                    <span class="feature">📝 Analyse de transcription</span>
+                    <span class="feature">💡 Conseils AKABI</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Interface du chatbot -->
+              <div class="stats-container">
+                <div class="stats-header">💬 Assistant Conversationnel</div>
+                <div class="stats-body">
+                  <QuestionForm 
+                    :defaultQuestion="'Que fait AKABI en IA?'" 
+                    :fullTranscription="fullTranscription"
+                    :chat_model="settings.chat_model" 
+                  />
                 </div>
               </div>
 
@@ -397,98 +507,7 @@
 
           </div>
 
-          <div v-if="activeTab === 'tab3'">
-            <div id="app" class="page-container">
-              <div class="stats-container">
-                <div class="stats-header">Tu 🗣️ et tu obtiens la 💬 traduction ou la transcription</div>
-                <div class="stats-body"></div>
-                <div id="app">
-                  <p v-if="!isRecording"></p>
-
-                  <!-- Bouton d'enregistrement rond -->
-                  <div class="record-button-wrapper">
-                    <!-- <pre v-html="asciiSpectrogram" v-if="isRecording"></pre> -->
-
-                    <!-- <button @click.stop="toggleRecording" class="record-button"
-                      :class="{ 'record-button--recording': isRecording }"
-                      :title="isRecording ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
-                      <span class="record-button__inner">🎙️</span>
-                    </button> -->
-                    <!-- Label sous le bouton -->
-                    <!-- <span class="record-button__label">
-                      {{ isRecording ? 'Stop' : 'Cliquez pour démarrer le sous-titrage' }}
-                    </span> -->
-
-                    <Dictaphone 
-                      :asciiSpectrogram="asciiSpectrogram"
-                      :is-recording="isRecording"
-                      :audio-level="audioLevel"
-                      @click.stop="toggleRecording"
-                    />
-
-                  </div>
-
-                  <!-- Affichage du temps d'enregistrement -->
-                  <div v-if="isRecording" class="recording-timer">
-                    Enregistrement en cours: {{ formatTime(recordingTime) }}
-                    <div>{{ transcriptionLive.text }}</div>
-                  </div>
-
-
-              <!-- Textarea pour l'ensemble de la transcription avec style encadré -->
-              <div class="transcription-full-container">
-                <div class="transcription-header"> 💬 Audio transcipt
-                </div>
-                <textarea 
-                  ref="transcriptionArea" 
-                  v-model="accumulatedTranscription" 
-                  class="transcription-textarea" 
-                  readonly
-                  oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'">
-                </textarea>
-              </div>
-
-
-
-            <!-- Paramètre -->
-            <div class="stats-container">
-              <div class="stats-header">⚙️ Paramètres généraux</div>
-              <div class="settings-group">
-              </div>
-              <!-- Fenêtre modale pour les paramètres de transcription -->
-              <div class="settings-modal">
-                <div>
-                  <div>
-
-                    <div>
-                      <label class="switch">
-                        <input type="checkbox" :checked="settings.task === 'transcribe'" @change="toggleTask">
-                        <span class="slider"></span>
-                      </label> <span :class="{ bold: settings.task === 'transcribe' }">Transcrire</span>
-
-                    </div>
-
-                    <div>
-                      <label class="switch">
-                        <input type="checkbox" :checked="settings.task === 'translate'" @change="toggleTask">
-                        <span class="slider"></span>
-                      </label> <span :class="{ bold: settings.task === 'translate' }">Traduire (🇬🇧)</span>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                </div>
-                <div>
-                </div>
-              </div>
-            </div>
-
-
-                </div>
-              </div>
-            </div>
-          </div>
-
+          <!-- FIN MODE CHATBOT -->
 
         </div>
       </div>
@@ -549,7 +568,7 @@ export default {
 
       initializedModels: false, // Indique si les modèles sont bien chargés
 
-      activeTab: 'tab1', // Par défaut, l'onglet actif est le premier
+      activeTab: 'streaming', // Par défaut, mode streaming (upload + progressif)
 
       volumeHeight: 0,        // Niveau de volume (0 à 100)
       maxHeight: 10,          // Nombre maximum de blocs dans la barre
@@ -672,6 +691,16 @@ export default {
       } catch (error) {
         console.error("Erreur lors de l'initialisation des modèles :", error);
       }
+    },
+
+    openSwaggerAPI() {
+      // Ouvrir l'API Swagger dans un nouvel onglet
+      const apiUrl = process.env.VUE_APP_API_URL || 'http://localhost:8000';
+      window.open(`${apiUrl}/docs`, '_blank');
+      
+      // Afficher une info pour l'utilisateur
+      console.log('🔧 Mode Simple API ouvert dans Swagger');
+      console.log('📋 Utilisez l\'endpoint /transcribe_simple/ pour l\'API pure');
     },
 
     async keepAlive() {
@@ -1113,6 +1142,7 @@ export default {
       clearInterval(this.intervalId);
       this.progressBarExtractionAudio = "[██████████]"; // Barre pleine pour indiquer la fin
       this.loadingMessage = "Extraction audio terminée!";
+      this.progressMessage = "Extraction audio terminée!"; // Mettre à jour le message affiché dans l'UI
     },
     getSpeakerColor(speaker) {
       // Vérifie si une couleur est déjà générée pour ce locuteur
@@ -1473,84 +1503,53 @@ export default {
 
       try {
         // Utiliser la variable d'environnement pour l'URL de l'API
-        const response = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_streaming/`, {
+        const response = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_file/`, {
           method: 'POST',
           body: formData
         });
 
         if (!response.ok) {
           console.error("Erreur dans la réponse du serveur :", response.statusText);
-        return;
+          return;
         }
         
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let done = false;
-
-        console.log("Début du streaming...");
-
-        // Lire les données reçues en temps réel
-        while (!done) {
-          const { value, done: readerDone } = await reader.read();
-          done = readerDone;
-          buffer += decoder.decode(value, { stream: !done });
-
-          // Diviser les segments JSON reçus par nouvelle ligne (chaque segment est séparé par '\n')
-          let lines = buffer.split('\n');
-          buffer = lines.pop();  // Garder la dernière ligne partielle pour la prochaine boucle
-
-          // Traiter chaque segment JSON
-          for (const line of lines) {
-            if (line.trim()) {
-              try {
-                const data = JSON.parse(line);
-                console.log("Data reçue: ", data);
-
-                if (data.extraction_audio_status === "extraction_audio_done") {
-                  this.stopProgressLoop(); // Arrête la boucle de progression lorsque l'extraction est terminée
-                }
-
-                // Gestion de l'état "processing" pour afficher le message
-                if (data.status === 'diarization_processing') {
-                  this.progressData.message = data.message;  // Affiche "👂 Séparation des voix en cours..."
-                  this.progressMessage = data.message;  // Affiche "👂 Séparation des voix en cours..." dans la progression
-                  this.progressData.status = data.status;
-
-                } else if (data.status === 'diarization_done') {
-                  this.progressData.message = data.message;  // Affiche "Séparation terminée."
-                  // this.progressMessage = ''; // Réinitialise le message une fois terminé
-                  this.progressMessage = data.message;
-                  this.progressData.status = data.status;
-                }
-
-                // Si on reçoit la diarization complète
-                else if (data.diarization) {
-                  this.diarization = data.diarization;
-                  this.totalDuration = this.diarization.reduce((acc, entry) => acc + (entry.end_time - entry.start_time), 0);
-                  this.calculateSpeechStats();
-                }
-
-                // Si on reçoit un segment de transcription
-                else if (data.speaker && data.text && data.text.chunks) {
-                  const segment = data;
-                  this.transcriptions.push(segment);
-
-                  // Calcul de la progression
-                  const processedDuration = this.transcriptions.reduce((acc, seg) => acc + (seg.end_time - seg.start_time), 0);
-                  this.transcriptionProgress = (processedDuration / this.totalDuration) * 100;
-
-                  this.$nextTick(() => {
-                    console.log("DOM mis à jour avec le nouveau segment");
-                  });
-                }
-              } catch (error) {
-                console.error("Erreur de parsing JSON :", error);
-              }
-            }
-          }
+        // Traitement simple de la réponse JSON (non-streaming)
+        const data = await response.json();
+        console.log("Transcription reçue:", data);
+        
+        // Arrêter la boucle de progression
+        this.stopProgressLoop();
+        
+        // Traiter les transcriptions reçues
+        if (data.transcriptions && Array.isArray(data.transcriptions)) {
+          // Réinitialiser les données
+          this.transcriptions = [];
+          this.diarization = [];
+          
+          // Traiter chaque segment de transcription
+          data.transcriptions.forEach(segment => {
+            this.transcriptions.push(segment);
+            
+            // Créer une entrée de diarisation correspondante
+            this.diarization.push({
+              speaker: segment.speaker,
+              start_time: segment.start_time,
+              end_time: segment.end_time
+            });
+          });
+          
+          // Calculer les statistiques
+          this.totalDuration = this.diarization.reduce((acc, entry) => acc + (entry.end_time - entry.start_time), 0);
+          this.calculateSpeechStats();
+          
+          // Mise à jour de la progression
+          this.transcriptionProgress = 100;
+          this.progressMessage = "Transcription terminée !";
+          
+          console.log("Transcription complète traitée avec succès");
+        } else {
+          console.error("Format de réponse inattendu:", data);
         }
-        console.log("Streaming terminé.");
       } catch (error) {
         console.error("Erreur lors de l'upload ou récupération des transcriptions", error);
       }
@@ -2800,6 +2799,73 @@ input:checked + .slider
   padding-bottom: 5px;
   margin-bottom: 10px;
   display: inline-block;
+}
+
+.tab-subtitle {
+  display: block;
+  font-size: 10px;
+  font-weight: normal;
+  color: #888;
+  margin-top: 2px;
+}
+
+/* Styles pour les nouveaux modes */
+.api-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  border: 1px solid #667eea !important;
+}
+
+.api-button:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+  color: white !important;
+}
+
+.mode-features {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.feature {
+  background: #f0f9ff;
+  border: 1px solid #0ea5e9;
+  border-radius: 12px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #0369a1;
+}
+
+.dark .feature {
+  background: #0c4a6e;
+  border-color: #0ea5e9;
+  color: #7dd3fc;
+}
+
+/* Mode Live spécifique */
+.live-mode-container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.live-recording-container {
+  text-align: center;
+  padding: 20px;
+}
+
+.live-spectrogram {
+  font-family: monospace;
+  font-size: 24px;
+  letter-spacing: 2px;
+  color: #0ea5e9;
+  margin: 10px 0;
+}
+
+.live-textarea {
+  min-height: 200px;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
 .tab-content {
