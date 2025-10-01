@@ -30,7 +30,14 @@ from RAG import setup_rag_pipeline
 from silero_vad import get_speech_timestamps, load_silero_vad, read_audio
 from starlette.websockets import WebSocketDisconnect
 
-# logging.basicConfig(level=logging.DEBUG)
+# Configuration du logging avec plus de verbosité
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Affichage dans la console
+    ]
+)
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -104,6 +111,125 @@ full_transcription =  []
 
 # Charger les modèles
 # diarization_model = Pipeline.from_pretrained("pyannote/speaker-diarization")
+def load_core_models():
+    """Charge uniquement les modèles de base : Whisper + Diarisation (pas Chocolatine)"""
+    global Transcriber_Whisper, Transcriber_Whisper_live, last_activity_timestamp, diarization_model
+    import time
+    
+    # Compter seulement les modèles core (pas Chocolatine)
+    core_models_to_load = sum([1 for model in [Transcriber_Whisper, Transcriber_Whisper_live] if model is None])
+    current_model = 0
+    
+    if core_models_to_load > 0:
+        logging.info(f"🎤 Initialisation des modèles de base : {core_models_to_load} modèle(s) Whisper...")
+        logging.info("⏱️ Temps estimé: 2-5 minutes (modèles STT)")
+    
+    # Vérifier que diarisation est chargé (normalement chargé au démarrage)
+    if diarization_model is None:
+        logging.error("❌ Modèle de diarisation non disponible")
+        raise RuntimeError("Le modèle de diarisation doit être chargé au démarrage")
+
+    if Transcriber_Whisper is None:
+        current_model += 1
+        logging.info(f"📦 [{current_model}/{core_models_to_load}] Démarrage du chargement de Whisper Principal...")
+        logging.info(f"🔄 Modèle: {model_settings} - Transcription de haute qualité")
+        logging.info("💾 Taille estimée: ~1-3 GB - Temps estimé: 1-3 minutes")
+        
+        start_time = time.time()
+        try:
+            Transcriber_Whisper = pipeline(
+                    "automatic-speech-recognition",
+                    model = model_settings,
+                    chunk_length_s=30,
+                    device=device
+                )
+            load_time = time.time() - start_time
+            logging.info(f"✅ [{current_model}/{core_models_to_load}] Whisper Principal chargé en {load_time:.1f}s")
+            logging.info(f"🎯 GPU utilisé: {device}")
+        except Exception as e:
+            logging.error(f"❌ Erreur lors du chargement de Whisper Principal: {str(e)}")
+            raise
+
+    if Transcriber_Whisper_live is None:
+        current_model += 1
+        logging.info(f"📦 [{current_model}/{core_models_to_load}] Démarrage du chargement de Whisper Live...")
+        logging.info("🔄 Modèle: openai/whisper-medium - Transcription en temps réel")
+        logging.info("💾 Taille estimée: ~1.5 GB - Temps estimé: 1-2 minutes")
+        
+        start_time = time.time()
+        try:
+            Transcriber_Whisper_live = pipeline(
+                    "automatic-speech-recognition",
+                    model = "openai/whisper-medium",
+                    chunk_length_s=30,
+                    device=device
+                )
+            load_time = time.time() - start_time
+            logging.info(f"✅ [{current_model}/{core_models_to_load}] Whisper Live chargé en {load_time:.1f}s")
+            logging.info(f"🎯 GPU utilisé: {device}")
+        except Exception as e:
+            logging.error(f"❌ Erreur lors du chargement de Whisper Live: {str(e)}")
+            raise
+
+    # Résumé final du chargement des modèles core
+    if core_models_to_load > 0:
+        logging.info("🎉 MODÈLES DE BASE CHARGÉS AVEC SUCCÈS!")
+        logging.info("📊 Résumé des modèles STT disponibles:")
+        if Transcriber_Whisper: logging.info(f"  ✅ Whisper Principal ({model_settings}): Transcription haute qualité")
+        if Transcriber_Whisper_live: logging.info("  ✅ Whisper Live (medium): Transcription temps réel")
+        if diarization_model: logging.info("  ✅ Diarisation: Séparation des locuteurs")
+        logging.info(f"🚀 Système STT prêt sur {device}!")
+
+    # Optimisation GPU pour les modèles Whisper
+    if device.type == "cuda":
+        logging.info("⚡ Optimisation GPU: Conversion des modèles Whisper en FP16...")
+        if Transcriber_Whisper:
+            model_post = Transcriber_Whisper.model
+            model_post = model_post.half()
+            Transcriber_Whisper.model = model_post
+            logging.info("  ✅ Whisper Principal optimisé (FP16)")
+
+        if Transcriber_Whisper_live:
+            model_live = Transcriber_Whisper_live.model
+            model_live = model_live.half()
+            Transcriber_Whisper_live.model = model_live
+            logging.info("  ✅ Whisper Live optimisé (FP16)")
+        
+        logging.info("⚡ Optimisation GPU terminée - Vitesse accrue!")
+
+    # Mettre à jour le timestamp d'activité
+    last_activity_timestamp = time.time()
+
+def load_ai_model():
+    """Charge uniquement le modèle IA : Chocolatine"""
+    global Chocolatine, last_activity_timestamp
+    import time
+    
+    if Chocolatine is None:
+        logging.info("🤖 Démarrage du chargement de Chocolatine pour l'IA...")
+        logging.info("🔄 Chocolatine (14B paramètres) - Téléchargement depuis Hugging Face...")
+        logging.info("💾 Taille estimée: ~8-12 GB - Temps estimé: 3-8 minutes")
+        
+        start_time = time.time()
+        try:
+            Chocolatine = pipeline(
+                "text-generation", 
+                model="jpacifico/Chocolatine-2-14B-Instruct-v2.0",
+                device=device
+            )
+            load_time = time.time() - start_time
+            logging.info(f"✅ Chocolatine chargé en {load_time:.1f}s")
+            logging.info(f"🎯 GPU utilisé: {device}")
+            logging.info("🤖 IA prête pour l'analyse de transcriptions!")
+        except Exception as e:
+            logging.error(f"❌ Erreur lors du chargement de Chocolatine: {str(e)}")
+            raise
+    else:
+        logging.info("✅ Chocolatine déjà chargé")
+        
+    # Mettre à jour le timestamp d'activité
+    last_activity_timestamp = time.time()
+
 def load_pipeline_diarization(model):
     pipeline_diarization = Pipeline.from_pretrained(
         model,
@@ -172,22 +298,35 @@ app = FastAPI(
     description="""
     🎵 **API complète de transcription audio/vidéo avec IA**
     
-    TranscriMate offre des fonctionnalités avancées de traitement audio :
+    TranscriMate offre **3 modes de transcription** adaptés à différents besoins :
     
-    ## 🚀 **Fonctionnalités principales**
+    ## 🚀 **3 Modes Disponibles**
     
-    * **🎯 Diarisation** - Séparation automatique des locuteurs
-    * **📝 Transcription** - Conversion audio vers texte avec Whisper
-    * **🔴 Temps réel** - Streaming WebSocket pour transcription live
-    * **🤖 IA** - Analyse des transcriptions avec Chocolatine/GPT
-    * **⚡ GPU** - Support CUDA pour performances optimales
+    ### **1️⃣ Mode Simple API** (`/transcribe_simple/`)
+    * **Usage :** Intégrations tierces, développeurs, applications externes
+    * **Fonctionnalités :** Diarisation + Transcription complète
+    * **Interface :** Swagger uniquement (pas d'UI frontend)
+    * **Retour :** JSON structuré avec métadonnées complètes
+    
+    ### **2️⃣ Mode Streaming** (`/transcribe_streaming/`)  
+    * **Usage :** Interface utilisateur avec feedback temps réel
+    * **Fonctionnalités :** Diarisation + Transcription avec affichage progressif
+    * **Interface :** Frontend Vue.js avec Server-Sent Events
+    * **Retour :** Segments progressifs par locuteur
+    
+    ### **3️⃣ Mode Live** (`/live_transcription/`)
+    * **Usage :** Transcription microphone en temps réel
+    * **Fonctionnalités :** Transcription continue (sans diarisation)
+    * **Interface :** WebSocket bidirectionnel
+    * **Retour :** Flux audio → texte instantané
     
     ## 🛠️ **Technologies**
     
-    * PyTorch + CUDA pour performances GPU
-    * Whisper (OpenAI) pour transcription
-    * pyannote.audio pour diarisation
-    * Gestion cross-platform (Windows/Linux)
+    * **🎯 Diarisation** - pyannote.audio pour séparation des locuteurs
+    * **📝 Transcription** - Whisper (OpenAI) haute qualité & temps réel
+    * **🤖 IA** - Chocolatine/GPT pour analyse des transcriptions
+    * **⚡ GPU** - PyTorch + CUDA pour performances optimales
+    * **🌐 Cross-platform** - Support Windows/Linux
     """,
     version="1.0.0",
     contact={
@@ -201,54 +340,54 @@ app = FastAPI(
 )
 
 def load_models():
+    """Charge TOUS les modèles : Whisper + Diarisation + Chocolatine"""
     global Transcriber_Whisper, Transcriber_Whisper_live, last_activity_timestamp, Chocolatine
+    import time
+    
+    total_models = sum([1 for model in [Chocolatine, Transcriber_Whisper, Transcriber_Whisper_live] if model is None])
+    
+    if total_models > 0:
+        logging.info(f"🚀 Initialisation COMPLÈTE de {total_models} modèle(s)...")
+        logging.info("⏱️ Temps estimé total: 5-15 minutes (premier chargement)")
 
-    if Chocolatine is None:
-        logging.info("Chargement du modèle Chocolatine...")
-        Chocolatine = pipeline(
-            "text-generation", 
-            model="jpacifico/Chocolatine-2-14B-Instruct-v2.0",
-            device=device
-        )
-        logging.info("Modèle Chocolatine chargé")
+    # Charger les modèles de base (STT)
+    logging.info("🎤 === CHARGEMENT DES MODÈLES STT ===")
+    load_core_models()
+    
+    # Charger le modèle IA
+    logging.info("🤖 === CHARGEMENT DU MODÈLE IA ===")
+    load_ai_model()
 
+    # Résumé final complet
+    logging.info("🎉 === TOUS LES MODÈLES CHARGÉS AVEC SUCCÈS ===")
+    logging.info("📊 Résumé complet des modèles disponibles:")
+    if Chocolatine: logging.info("  ✅ Chocolatine: Génération de texte IA")
+    if Transcriber_Whisper: logging.info(f"  ✅ Whisper Principal ({model_settings}): Transcription haute qualité")
+    if Transcriber_Whisper_live: logging.info("  ✅ Whisper Live (medium): Transcription temps réel")
+    if diarization_model: logging.info("  ✅ Diarisation: Séparation des locuteurs")
+    logging.info(f"🚀 Système COMPLET prêt sur {device} - Toutes les fonctionnalités disponibles!")
 
-    if Transcriber_Whisper is None:
-        logging.info("Chargement du modèle Transcriber_Whisper...")
-        Transcriber_Whisper = pipeline(
-                "automatic-speech-recognition",
-                # model = model_selected[0],
-                model = model_settings,
-                chunk_length_s=30,
-                # stride_length_s=(4, 2),
-                # torch_dtype="torch.float16",    
-                device=device
-            )
-        logging.info("Modèle Transcriber_Whisper chargé")
+    # Mettre à jour le timestamp d'activité
+    last_activity_timestamp = time.time()
 
-
-    if Transcriber_Whisper_live is None:
-        logging.info("Chargement du modèle Transcriber_Whisper_live...")
-        Transcriber_Whisper_live = pipeline(
-                "automatic-speech-recognition",
-                model = "openai/whisper-medium",
-                chunk_length_s=30,
-                # stride_length_s=(4, 2),
-                # torch_dtype="torch.float16",    
-                device=device
-            )
-        logging.info("Modèle Transcriber_Whisper_live chargé")
 
 
     # Si un GPU est disponible, convertir le modèle Whisper en FP16
     if device.type == "cuda":
-        model_post = Transcriber_Whisper.model
-        model_post = model_post.half()  # Convertir en FP16
-        Transcriber_Whisper.model = model_post  # Réassigner le modèle à la pipeline
+        logging.info("⚡ Optimisation GPU: Conversion des modèles Whisper en FP16...")
+        if Transcriber_Whisper:
+            model_post = Transcriber_Whisper.model
+            model_post = model_post.half()  # Convertir en FP16
+            Transcriber_Whisper.model = model_post  # Réassigner le modèle à la pipeline
+            logging.info("  ✅ Whisper Principal optimisé (FP16)")
 
-        model_live = Transcriber_Whisper_live.model
-        model_live = model_live.half()  # Convertir en FP16
-        Transcriber_Whisper_live.model = model_live  # Réassigner le modèle à la pipeline
+        if Transcriber_Whisper_live:
+            model_live = Transcriber_Whisper_live.model
+            model_live = model_live.half()  # Convertir en FP16
+            Transcriber_Whisper_live.model = model_live  # Réassigner le modèle à la pipeline
+            logging.info("  ✅ Whisper Live optimisé (FP16)")
+        
+        logging.info("⚡ Optimisation GPU terminée - Vitesse accrue!")
 
     # Mettre à jour le timestamp d'activité
     last_activity_timestamp = time.time()
@@ -453,10 +592,87 @@ async def gpu_test():
     description="Charge tous les modèles IA (Whisper, pyannote, Chocolatine) en mémoire GPU/CPU"
 )
 async def initialize_models():
-    # yield {"message": "Modèles initialisation démarrée"}
+    import time
+    
+    logging.info("🚀 === INITIALISATION DES MODÈLES DEMANDÉE ===")
+    logging.info(f"🕐 Heure de début: {time.strftime('%H:%M:%S')}")
+    logging.info(f"💻 Appareil utilisé: {device}")
+    
+    # Vérifier l'état actuel des modèles
+    models_already_loaded = sum([1 for model in [Chocolatine, Transcriber_Whisper, Transcriber_Whisper_live] if model is not None])
+    models_to_load = sum([1 for model in [Chocolatine, Transcriber_Whisper, Transcriber_Whisper_live] if model is None])
+    
+    if models_to_load == 0:
+        logging.info("✅ Tous les modèles sont déjà chargés!")
+        return {"message": "Tous les modèles sont déjà chargés", "status": "already_loaded"}
+    
+    logging.info(f"📊 État: {models_already_loaded} modèle(s) déjà chargé(s), {models_to_load} à charger")
+    
+    start_total = time.time()
+    try:
+        load_models()
+        total_time = time.time() - start_total
+        
+        logging.info("🎉 === INITIALISATION TERMINÉE ===")
+        logging.info(f"⏱️ Temps total: {total_time:.1f} secondes")
+        logging.info(f"🕐 Heure de fin: {time.strftime('%H:%M:%S')}")
+        
+        return {
+            "message": "Modèles chargés avec succès", 
+            "status": "loaded",
+            "total_time_seconds": round(total_time, 1),
+            "device": str(device)
+        }
+        
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de l'initialisation: {str(e)}")
+        return {"message": f"Erreur lors du chargement: {str(e)}", "status": "error"}
 
-    load_models()
-    return {"message": "Modèles chargés avec succès"}
+@app.get(
+    "/model-status/", 
+    tags=["🔧 Système"],
+    summary="État des modèles",
+    description="Affiche l'état actuel de tous les modèles IA et leur statut de chargement"
+)
+async def get_models_status():
+    models_status = {
+        "device": str(device),
+        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+        "models": {
+            "chocolatine": {
+                "loaded": Chocolatine is not None,
+                "type": "text-generation",
+                "model_name": "jpacifico/Chocolatine-2-14B-Instruct-v2.0" if Chocolatine else None
+            },
+            "whisper_principal": {
+                "loaded": Transcriber_Whisper is not None,
+                "type": "speech-recognition",
+                "model_name": model_settings if Transcriber_Whisper else None
+            },
+            "whisper_live": {
+                "loaded": Transcriber_Whisper_live is not None,
+                "type": "speech-recognition-live", 
+                "model_name": "openai/whisper-medium" if Transcriber_Whisper_live else None
+            },
+            "diarization": {
+                "loaded": diarization_model is not None,
+                "type": "speaker-diarization",
+                "model_name": "pyannote/speaker-diarization-3.1" if diarization_model else None
+            }
+        }
+    }
+    
+    total_loaded = sum([1 for model in models_status["models"].values() if model["loaded"]])
+    models_status["summary"] = {
+        "total_models": 4,
+        "loaded_models": total_loaded,
+        "all_loaded": total_loaded == 4,
+        "percentage": round((total_loaded / 4) * 100, 1)
+    }
+    
+    logging.info(f"📊 État des modèles demandé - {total_loaded}/4 chargés ({models_status['summary']['percentage']}%)")
+    
+    return models_status
 
 @app.get(
     "/keep_alive/", 
@@ -647,158 +863,297 @@ def update_settings(settings: Settings):
 
 
 @app.post(
-    "/uploadfile/", 
+    "/transcribe_streaming/", 
     tags=["🎵 Audio"],
-    summary="Transcription complète avec streaming",
-    description="Traitement complet : diarisation + transcription avec retour en temps réel (Server-Sent Events)"
+    summary="🔄 Interface Progressive - Streaming Temps Réel",
+    description="**Mode 2/3** - Traitement complet avec diarisation + transcription et affichage progressif (Server-Sent Events pour frontend Vue.js)"
 )
 async def upload_file_streaming(file: UploadFile = File(...)):
+    logging.info("=== DÉBUT UPLOAD_FILE_STREAMING ===")
+    logging.info(f"📁 Fichier reçu: {file.filename}, Type: {file.content_type}, Taille: {file.size if hasattr(file, 'size') else 'inconnue'}")
+    
     # Vérifier et initialiser les modèles si nécessaire
     global Transcriber_Whisper, diarization_model
+    logging.debug(f"🔍 État des modèles - Transcriber_Whisper: {'✅ Chargé' if Transcriber_Whisper is not None else '❌ Non chargé'}")
+    logging.debug(f"🔍 État des modèles - diarization_model: {'✅ Chargé' if diarization_model is not None else '❌ Non chargé'}")
+    
     if Transcriber_Whisper is None or diarization_model is None:
-        logging.info("Initialisation des modèles pour uploadfile...")
-        await load_models()
+        logging.warning("⚠️ Modèles STT non initialisés, démarrage du chargement des modèles de base...")
+        start_init = time.time()
+        load_core_models()  # Charger seulement les modèles STT (Whisper + diarisation)
+        end_init = time.time()
+        logging.info(f"⏱️ Modèles STT initialisés en {end_init - start_init:.2f}s")
         
         # Vérifier que l'initialisation a réussi
         if Transcriber_Whisper is None or diarization_model is None:
-            logging.error("Échec de l'initialisation des modèles")
+            logging.error("❌ ÉCHEC de l'initialisation des modèles")
             raise HTTPException(status_code=500, detail="Impossible d'initialiser les modèles. Vérifiez les logs serveur.")
+        else:
+            logging.info("✅ Modèles initialisés avec succès")
     
-    async with async_temp_manager_context("uploadfile") as temp_manager:
+    logging.info("📂 Initialisation du gestionnaire de fichiers temporaires...")
+    async with async_temp_manager_context("transcribe_streaming") as temp_manager:
         # Lire le fichier uploadé
+        logging.debug("📖 Lecture du fichier uploadé...")
+        start_read = time.time()
         file_data = await file.read()
+        end_read = time.time()
+        logging.info(f"📖 Fichier lu en {end_read - start_read:.2f}s - Taille: {len(file_data)} bytes")
+        
+        # Créer le fichier temporaire
+        logging.debug("💾 Création du fichier temporaire...")
         file_path = temp_manager.create_temp_file(file.filename, file_data)
+        logging.info(f"💾 Fichier temporaire créé: {file_path}")
+        
+        # Vérification immédiate de l'existence du fichier
+        if os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+            logging.info(f"✅ Fichier temporaire confirmé - Taille: {file_size} bytes")
+        else:
+            logging.error(f"❌ ERREUR CRITIQUE: Le fichier temporaire n'a pas été créé: {file_path}")
+            raise HTTPException(status_code=500, detail="Impossible de créer le fichier temporaire")
         
         # Détection de l'extension du fichier (sécurisée)
         file_extension = os.path.splitext(file.filename)[1].lower()
-        logging.info(f"Extension détectée {file_extension}.")
+        logging.info(f"🔍 Extension détectée: {file_extension}")
 
         # Utilise les paramètres de transcription
-        task = current_settings.get("transcribe")  # Prend la valeur par défaut si non définie
+        task = current_settings.get("task", "transcribe")  # Prend la valeur par défaut si non définie
+        logging.info(f"⚙️ Configuration actuelle - Task: {task}, Modèle: {current_settings.get('model', 'défaut')}")
 
-        logging.info(f"Fichier {file.filename} sauvegardé avec succès.")
-
+        # Détection du type de fichier
         file_type = filetype.guess(file_path)
-        logging.info(f"Type de fichier : {file_type.mime}, Extension : {file_type.extension}")
-
-        extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
-
-        # Si le fichier est un fichier audio (formats courants)
-        if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
-            logging.info(f"fichier audio détecté: {file_extension}.")
-
-            audio = AudioSegment.from_file(file_path)
-            
-            logging.info(f"Conversion du {file.filename} en mono 16kHz.")
-            audio = audio.set_channels(1)
-            audio = audio.set_frame_rate(16000)
-            # Créer un chemin pour le fichier audio converti
-            audio_path = temp_manager.get_temp_path_with_suffix(".wav")
-            logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
-            audio.export(audio_path, format="wav")
-
-        elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
-            logging.info(f"fichier vidéo détecté: {file_extension}.")
-            VideoFileClip(file_path)
-            logging.info("Extraction Audio démarrée ...")
-
-            logging.info(extraction_status)
-
-            audio = AudioSegment.from_file(file_path, format=file_type.extension)
-
-            logging.info(extraction_status)
-
-            logging.info(f"Conversion du {file.filename} en mono 16kHz.")
-            audio = audio.set_channels(1)
-            audio = audio.set_frame_rate(16000)
-            # Créer un chemin pour le fichier audio converti
-            audio_path = temp_manager.get_temp_path_with_suffix(".wav")
-            logging.info(f"Sauvegarde de la piste audio dans {audio_path}.")
-            audio.export(audio_path, format="wav")
-            
+        if file_type:
+            logging.info(f"🎯 Type de fichier détecté - MIME: {file_type.mime}, Extension: {file_type.extension}")
         else:
-            # Format de fichier non supporté
-            logging.error(f"Format de fichier non supporté: {file_extension}")
-            raise HTTPException(status_code=400, detail=f"Format de fichier non supporté: {file_extension}. Formats supportés: .mp3, .wav, .aac, .ogg, .flac, .m4a, .mp4, .mov, .3gp, .mkv")
+            logging.warning(f"⚠️ Impossible de détecter le type de fichier, utilisation de l'extension: {file_extension}")
 
-        # Vérification si le fichier existe
-        if not os.path.exists(audio_path):
-            logging.error(f"Le fichier {audio_path} n'existe pas.")
-            raise HTTPException(status_code=404, detail=f"Le fichier {audio_path} n'existe pas.")
+        # Copier les données nécessaires hors du contexte pour éviter le race condition
+        file_path_copy = str(file_path)  # Copie du chemin
+        file_extension_copy = str(file_extension)  # Copie de l'extension
+        filename_copy = str(file.filename)  # Copie du nom de fichier
+        task_copy = str(task)  # Copie de la tâche
+        
+    # Fonction de traitement qui sera exécutée hors contexte
+    async def live_process_audio():
+        logging.info("🚀 === DÉBUT DU STREAMING live_process_audio() ===")
+        start_total = time.time()
+        
+        # Envoyer le statut de début d'extraction
+        extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_ongoing', 'message': 'Extraction audio en cours ...'})
+        yield f"{extraction_status}\n"
+        logging.info(f"📤 Message envoyé au frontend: {extraction_status}")
+
+        # Faire l'extraction audio dans le streaming pour un feedback temps réel
+        audio_path = None
+        try:
+            start_extraction = time.time()
+            
+            # Si le fichier est un fichier audio (formats courants)
+            if file_extension_copy in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
+                logging.info(f"🎵 Fichier audio détecté: {file_extension_copy}")
+
+                logging.debug("🔄 Chargement du fichier audio avec pydub...")
+                start_load = time.time()
+                audio = AudioSegment.from_file(file_path_copy)
+                end_load = time.time()
+                logging.info(f"🎵 Audio chargé en {end_load - start_load:.2f}s - Durée: {len(audio)/1000:.2f}s, Channels: {audio.channels}, Sample Rate: {audio.frame_rate}Hz")
+                
+                logging.debug(f"🔄 Conversion du {filename_copy} en mono 16kHz...")
+                start_convert = time.time()
+                audio = audio.set_channels(1)
+                audio = audio.set_frame_rate(16000)
+                end_convert = time.time()
+                logging.info(f"🔄 Conversion terminée en {end_convert - start_convert:.2f}s")
+                    
+                    # Créer un chemin pour le fichier audio converti (utiliser tempfile pour éviter le race condition)
+                import tempfile
+                audio_path = tempfile.mktemp(suffix=".wav")
+                logging.info(f"💾 Sauvegarde de la piste audio dans {audio_path}")
+                start_export = time.time()
+                audio.export(audio_path, format="wav")
+                end_export = time.time()
+                logging.info(f"💾 Exportation terminée en {end_export - start_export:.2f}s")
+
+            elif file_extension_copy in ['.mp4', '.mov', '.3gp', '.mkv']:
+                logging.info(f"🎬 Fichier vidéo détecté: {file_extension_copy}")
+                
+                logging.debug("🔄 Chargement de la vidéo avec MoviePy...")
+                start_video_load = time.time()
+                video_clip = VideoFileClip(file_path_copy)
+                end_video_load = time.time()
+                logging.info(f"🎬 Vidéo chargée en {end_video_load - start_video_load:.2f}s - Durée: {video_clip.duration:.2f}s")
+                
+                logging.debug("🔄 Extraction audio de la vidéo...")
+                start_audio_extract = time.time()
+                
+                # Utiliser le type détecté ou l'extension du fichier
+                format_to_use = file_type.extension if file_type else file_extension_copy[1:]  # Enlever le point
+                logging.debug(f"🔄 Format utilisé pour l'extraction: {format_to_use}")
+                
+                audio = AudioSegment.from_file(file_path_copy, format=format_to_use)
+                end_audio_extract = time.time()
+                logging.info(f"🎵 Audio extrait en {end_audio_extract - start_audio_extract:.2f}s - Durée: {len(audio)/1000:.2f}s")
+
+                logging.debug(f"🔄 Conversion du {filename_copy} en mono 16kHz...")
+                start_convert_video = time.time()
+                audio = audio.set_channels(1)
+                audio = audio.set_frame_rate(16000)
+                end_convert_video = time.time()
+                logging.info(f"🔄 Conversion vidéo terminée en {end_convert_video - start_convert_video:.2f}s")
+                
+                # Créer un chemin pour le fichier audio converti (utiliser tempfile pour éviter le race condition)
+                import tempfile
+                audio_path = tempfile.mktemp(suffix=".wav")
+                logging.info(f"💾 Sauvegarde de la piste audio dans {audio_path}")
+                start_export_video = time.time()
+                audio.export(audio_path, format="wav")
+                end_export_video = time.time()
+                logging.info(f"💾 Exportation vidéo terminée en {end_export_video - start_export_video:.2f}s")
+                
+                # Libérer la mémoire
+                video_clip.close()
+                logging.debug("🗑️ Ressources vidéo libérées")
+                
+            else:
+                # Format de fichier non supporté
+                logging.error(f"❌ Format de fichier non supporté: {file_extension_copy}")
+                logging.info("📋 Formats supportés: .mp3, .wav, .aac, .ogg, .flac, .m4a, .mp4, .mov, .3gp, .mkv")
+                error_msg = json.dumps({'error': 'unsupported_format', 'message': f'Format de fichier non supporté: {file_extension_copy}'})
+                yield f"{error_msg}\n"
+                logging.debug(f"📤 Message d'erreur envoyé: {error_msg}")
+                return
+
+            end_extraction = time.time()
+            total_extraction_time = end_extraction - start_extraction
+            logging.info(f"⏱️ Extraction audio totale terminée en {total_extraction_time:.2f}s")
+
+            # Vérification si le fichier existe
+            if not os.path.exists(audio_path):
+                logging.error(f"❌ Le fichier audio converti n'existe pas: {audio_path}")
+                error_msg = json.dumps({'error': 'file_not_found', 'message': f'Le fichier {audio_path} n\'existe pas.'})
+                yield f"{error_msg}\n"
+                logging.debug(f"📤 Message d'erreur envoyé: {error_msg}")
+                return
+                
+            # Vérification supplémentaire de l'existence du fichier original
+            if not os.path.exists(file_path_copy):
+                logging.error(f"❌ Le fichier original n'existe plus: {file_path_copy}")
+                error_msg = json.dumps({'error': 'original_file_not_found', 'message': f'Le fichier original {file_path_copy} n\'existe plus.'})
+                yield f"{error_msg}\n"
+                logging.debug(f"📤 Message d'erreur envoyé: {error_msg}")
+                return
+
+            # Vérifier la taille du fichier créé
+            file_size = os.path.getsize(audio_path)
+            logging.info(f"✅ Fichier audio converti créé avec succès - Taille: {file_size} bytes")
+
+            # Envoyer le statut de fin d'extraction
+            extraction_done = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
+            yield f"{extraction_done}\n"
+            logging.info(f"📤 ✅ Message de fin d'extraction envoyé: {extraction_done}")
+
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logging.error(f"❌ ERREUR lors de l'extraction audio:")
+            logging.error(f"❌ Type d'erreur: {type(e).__name__}")
+            logging.error(f"❌ Message: {str(e)}")
+            logging.error(f"❌ Stack trace complet:\n{error_details}")
+            
+            error_msg = json.dumps({
+                'error': 'extraction_failed', 
+                'message': f'Erreur lors de l\'extraction audio: {str(e)}',
+                'error_type': type(e).__name__
+            })
+            yield f"{error_msg}\n"
+            logging.debug(f"📤 Message d'erreur détaillé envoyé: {error_msg}")
+            return
 
         # Étape 1 : Diarisation
-        logging.info(f"Démarrage de la diarisation du fichier {audio_path}")
+        logging.info(f"🎯 === DÉBUT DE LA DIARISATION ===")
+        logging.info(f"🎯 Fichier audio à traiter: {audio_path}")
+        
+        # Vérification finale avant diarisation
+        if not os.path.exists(audio_path):
+            logging.error(f"❌ CRITIQUE: Fichier audio inexistant juste avant diarisation: {audio_path}")
+            error_msg = json.dumps({
+                'error': 'audio_file_missing_before_diarization', 
+                'message': f'Le fichier audio {audio_path} n\'existe plus avant la diarisation.',
+                'error_type': 'FileNotFoundError'
+            })
+            yield f"{error_msg}\n"
+            return
+            
+        logging.info(f"🎯 Taille du fichier: {os.path.getsize(audio_path)} bytes")
+        
+        start_diarization_total = time.time()
 
-        async def live_process_audio():
-            extraction_status = json.dumps({'extraction_audio_status': 'extraction_audio_done', 'message': 'Extraction audio terminée!'})
-            yield f"{extraction_status}\n"
-            logging.info(extraction_status)
+        # Envoi du statut "en cours"
+        start_diarization = json.dumps({'status': 'diarization_processing', 'message': 'Séparation des voix en cours, patience est mère de vertu ...'})
+        yield f"{start_diarization}\n"
+        await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
+        logging.info(start_diarization)
 
-            # Envoi du statut "en cours"
-            start_diarization = json.dumps({'status': 'diarization_processing', 'message': 'Séparation des voix en cours, patience est mère de vertu ...'})
-            yield f"{start_diarization}\n"
-            await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
-            logging.info(start_diarization)
+        logging.debug(f"Diarization démarrée pour le fichier {audio_path}")
 
-            logging.debug(f"Diarization démarrée pour le fichier {audio_path}")
+        try:
+            with ProgressHook() as hook:
+                diarization = diarization_model(audio_path, hook=hook)
+            # diarization = diarization_model(audio_path)
+        except Exception as e:
+            logging.error(f"Erreur pendant la diarisation : {str(e)}")
 
-            try:
-                with ProgressHook() as hook:
-                    diarization = diarization_model(audio_path, hook=hook)
-                # diarization = diarization_model(audio_path)
-            except Exception as e:
-                logging.error(f"Erreur pendant la diarisation : {str(e)}")
+        # Envoi final du statut pour indiquer la fin
+        end_diarization = json.dumps({'status': 'diarization_done', 'message': 'Séparation des voix terminée.'})
+        yield f"{end_diarization}\n"
 
-            # Envoi final du statut pour indiquer la fin
-            end_diarization = json.dumps({'status': 'diarization_done', 'message': 'Séparation des voix terminée.'})
-            yield f"{end_diarization}\n"
-
-            logging.debug(f"Diarization terminée {diarization}")
+        logging.debug(f"Diarization terminée {diarization}")
 
             # diarization_json = convert_tracks_to_json(diarization)
 
-            try:
-                diarization_json = convert_tracks_to_json(diarization)
-                logging.info(f"Taille des données de diarisation en JSON : {len(json.dumps(diarization_json))} octets")
-            except Exception as e:
-                logging.error(f"Erreur pendant la conversion de la diarisation en JSON : {str(e)}")
-                yield json.dumps({"status": "error", "message": f"Erreur pendant la conversion en JSON : {str(e)}"}) + "\n"
-                return
-
-            logging.debug(f"Résultat de la diarization {diarization_json}")
-
-            await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
-            logging.info(end_diarization)
-
+        try:
             diarization_json = convert_tracks_to_json(diarization)
+            logging.info(f"Taille des données de diarisation en JSON : {len(json.dumps(diarization_json))} octets")
+        except Exception as e:
+            logging.error(f"Erreur pendant la conversion de la diarisation en JSON : {str(e)}")
+            yield json.dumps({"status": "error", "message": f"Erreur pendant la conversion en JSON : {str(e)}"}) + "\n"
+            return
 
-            # Envoyer la diarisation complète d'abord
-            logging.info(f"{json.dumps({'diarization': diarization_json})}")
-            yield f"{json.dumps({'diarization': diarization_json})}\n"
-            await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
-    
-            # Exporter les segments pour chaque locuteur
-            total_chunks = len(list(diarization.itertracks(yield_label=True))) 
-            logging.info(f"total_turns: {total_chunks}")
-            
-            turn_number = 0
-            # for turn, _, speaker in tqdm(diarization.itertracks(yield_label=True), total=total_turns, desc="Processing turns"):
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
-                turn_number += 1
-                logging.info(f"Tour {turn_number}/{total_chunks}")
+        logging.debug(f"Résultat de la diarization {diarization_json}")
 
-                # Étape 2 : Transcription pour chaque segment
-                start_ms = int(turn.start * 1000)  # Convertir de secondes en millisecondes
-                end_ms = int(turn.end * 1000)
+        await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
+        logging.info(end_diarization)
 
-                # Extraire le segment audio correspondant au speaker
-                segment_audio = audio[start_ms:end_ms]
+        diarization_json = convert_tracks_to_json(diarization)
 
-                # Sauvegarder le segment temporairement pour Whisper
-                segment_path = temp_manager.get_temp_path_with_suffix(".wav")
-                segment_audio.export(segment_path, format="wav")
+        # Envoyer la diarisation complète d'abord
+        logging.info(f"{json.dumps({'diarization': diarization_json})}")
+        yield f"{json.dumps({'diarization': diarization_json})}\n"
+        await asyncio.sleep(0.1)  # Petit délai pour forcer l'envoi de la première réponse
 
-                logging.info(f"----> Transcription démarée avec le model <{model_settings}> et la task <{task}> <----")
+        # Exporter les segments pour chaque locuteur
+        total_chunks = len(list(diarization.itertracks(yield_label=True))) 
+        logging.info(f"total_turns: {total_chunks}")
+        
+        turn_number = 0
+        # for turn, _, speaker in tqdm(diarization.itertracks(yield_label=True), total=total_turns, desc="Processing turns"):
+        for turn, _, speaker in diarization.itertracks(yield_label=True):
+            turn_number += 1
+            logging.info(f"Tour {turn_number}/{total_chunks}")
+
+            # Étape 2 : Transcription pour chaque segment
+            start_ms = int(turn.start * 1000)  # Convertir de secondes en millisecondes
+            end_ms = int(turn.end * 1000)
+
+            # Extraire le segment audio correspondant au speaker
+            segment_audio = audio[start_ms:end_ms]
+
+            # Sauvegarder le segment temporairement pour Whisper
+            segment_path = temp_manager.get_temp_path_with_suffix(".wav")
+            segment_audio.export(segment_path, format="wav")
+
+            logging.info(f"----> Transcription démarée avec le model <{model_settings}> et la task <{task}> <----")
 
                 # generate_kwargs = {
                 #     "max_new_tokens": 448,
@@ -811,47 +1166,49 @@ async def upload_file_streaming(file: UploadFile = File(...)):
                 #     "return_timestamps": True,
                 # }
 
-                if current_settings['task'] != "transcribe":
-                    generate_kwargs={
-                        "language": "english", 
-                    } 
+            if current_settings['task'] != "transcribe":
+                generate_kwargs={
+                    "language": "english", 
+                } 
 
-                else:
-                    generate_kwargs={
-                    } 
+            else:
+                generate_kwargs={
+                } 
 
-                # Transcrire ce segment avec Whisper
-                transcription = Transcriber_Whisper(
-                    segment_path,
-                    return_timestamps = True,
-                    generate_kwargs= generate_kwargs |  generate_kwargs_aposteriori
-                )
+            # Transcrire ce segment avec Whisper
+            transcription = Transcriber_Whisper(
+                segment_path,
+                return_timestamps = True,
+                generate_kwargs= generate_kwargs |  generate_kwargs_aposteriori
+            )
 
-                # Supprimer le fichier de segment une fois transcrit
-                # os.remove(segment_path)
+            # Supprimer le fichier de segment une fois transcrit
+            # os.remove(segment_path)
 
-                segment = {
-                    "speaker": speaker,
-                    "text": transcription,
-                    "start_time": turn.start,
-                    "end_time": turn.end,
-                    "audio_url": f"{server_url}/segment_audio/{os.path.basename(segment_path)}"  # URL du fichier audio
-                }
+            segment = {
+                "speaker": speaker,
+                "text": transcription,
+                "start_time": turn.start,
+                "end_time": turn.end,
+                "audio_url": f"{server_url}/segment_audio/{os.path.basename(segment_path)}"  # URL du fichier audio
+            }
 
-                logging.info(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée\n Résultat de la transcription {segment}")
-                full_transcription.append(segment)
+            logging.info(f"Transcription du speaker {speaker} du segment de {turn.start} à {turn.end} terminée\n Résultat de la transcription {segment}")
+            full_transcription.append(segment)
 
-                yield f"{json.dumps(segment)}\n"  # Envoi du segment de transcription en JSON
-                await asyncio.sleep(0)  # Forcer l'envoi de chaque chunk
+            yield f"{json.dumps(segment)}\n"  # Envoi du segment de transcription en JSON
+            await asyncio.sleep(0)  # Forcer l'envoi de chaque chunk
 
-                logging.info(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
+            logging.info(f"Transcription du speaker {speaker} pour le segment de {turn.start} à {turn.end} terminée")
 
-        # Retourner les résultats en streaming
+        # Fin du streaming
         logging.info(f"->> fin de transcription <<")
         logging.info(full_transcription)
-        return StreamingResponse(live_process_audio(), media_type="application/json")
 
-        # Le nettoyage est automatique avec async_temp_manager_context
+    # Le nettoyage est automatique avec async_temp_manager_context
+    
+    # Retourner la réponse streaming hors contexte pour éviter le race condition
+    return StreamingResponse(live_process_audio(), media_type="application/json")
 
 
 # Endpoint pour générer les URLs des segments audio
@@ -880,24 +1237,148 @@ async def get_segment_audio(filename: str):
         return {"error": "Fichier non trouvé"}
 
 @app.post(
-    "/process_audio/", 
+    "/transcribe_simple/", 
     tags=["🎵 Audio"],
-    summary="Traitement audio standard",
-    description="Traitement complet audio/vidéo avec diarisation et transcription (sans streaming)"
+    summary="🔧 API Simple - Diarisation + Transcription",
+    description="**Mode 1/3** - API pure pour intégrations tierces. Traitement complet avec diarisation et transcription (accessible uniquement via Swagger/API, sans interface utilisateur)"
 )
-async def process_audio(file: UploadFile = File(...)):
-    # Vérifier et initialiser les modèles si nécessaire
-    global Transcriber_Whisper
-    if Transcriber_Whisper is None:
-        logging.info("Initialisation des modèles pour process_audio...")
-        await load_models()
+async def transcribe_simple(file: UploadFile = File(...)):
+    """
+    Mode Simple : API uniquement pour intégrations tierces
+    - Diarisation complète (séparation des locuteurs)
+    - Transcription haute qualité
+    - Retour JSON structuré
+    - Aucune interface utilisateur (Swagger seulement)
+    """
+    logging.info("=== DÉBUT TRANSCRIBE_SIMPLE (API ONLY) ===")
+    logging.info(f"📁 Fichier API reçu: {file.filename}, Type: {file.content_type}")
+    
+    # Vérifier et initialiser les modèles STT si nécessaire
+    global Transcriber_Whisper, diarization_model
+    if Transcriber_Whisper is None or diarization_model is None:
+        logging.info("Initialisation des modèles STT pour transcribe_simple...")
+        load_core_models()  # Charger seulement les modèles STT (Whisper + diarisation)
         
         # Vérifier que l'initialisation a réussi
-        if Transcriber_Whisper is None:
-            logging.error("Échec de l'initialisation du modèle Transcriber_Whisper")
+        if Transcriber_Whisper is None or diarization_model is None:
+            logging.error("Échec de l'initialisation des modèles STT")
             raise HTTPException(status_code=500, detail="Impossible d'initialiser les modèles de transcription. Vérifiez les logs serveur.")
     
-    async with async_temp_manager_context("process_audio") as temp_manager:
+    async with async_temp_manager_context("transcribe_simple") as temp_manager:
+        # Lire le fichier uploadé
+        file_data = await file.read()
+        file_path = temp_manager.create_temp_file(file.filename, file_data)
+
+        # Détection de l'extension du fichier
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        logging.info(f"🎯 Extension détectée: {file_extension}")
+
+        # Traitement audio/vidéo
+        if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
+            logging.info(f"🎵 Fichier audio - traitement direct")
+            audio = AudioSegment.from_file(file_path)
+        elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
+            logging.info(f"🎬 Fichier vidéo - extraction audio")
+            VideoFileClip(file_path)
+            audio = AudioSegment.from_file(file_path, format=file_extension)
+        else:
+            logging.error(f"❌ Format non supporté: {file_extension}")
+            raise HTTPException(status_code=400, detail=f"Format de fichier non supporté: {file_extension}")
+
+        # Normalisation audio
+        audio = audio.set_channels(1)
+        audio = audio.set_frame_rate(16000)
+        
+        # Créer un chemin pour le fichier audio converti
+        audio_path = temp_manager.get_temp_path_with_suffix(".wav")
+        audio.export(audio_path, format="wav")
+        logging.info(f"✅ Audio normalisé sauvegardé: {audio_path}")
+        
+        # Étape 1 : Diarisation (séparation des locuteurs)
+        logging.info("🎯 === DÉBUT DIARISATION ===")
+        with ProgressHook() as hook:
+            diarization = diarization_model(audio_path, hook=hook)
+        logging.info("✅ Diarisation terminée")
+
+        # Étape 2 : Transcription par segment
+        logging.info("📝 === DÉBUT TRANSCRIPTION ===")
+        segments = []
+
+        for turn, _, speaker in diarization.itertracks(yield_label=True):
+            # Extraire le segment audio correspondant au speaker
+            start_ms = int(turn.start * 1000)  # Convertir en millisecondes
+            end_ms = int(turn.end * 1000)
+            segment_audio = audio[start_ms:end_ms]
+
+            # Sauvegarder le segment temporairement pour Whisper
+            segment_path = temp_manager.get_temp_path_with_suffix(".wav")
+            segment_audio.export(segment_path, format="wav")
+
+            # Transcrire ce segment avec Whisper
+            transcription = Transcriber_Whisper(
+                segment_path, 
+                return_timestamps="word",
+                generate_kwargs={"task": current_settings.get("task", "transcribe")}
+            )
+            
+            # Ajouter le segment transcrit
+            segments.append({
+                "speaker": speaker,
+                "text": transcription,
+                "start_time": turn.start,
+                "end_time": turn.end
+            })
+            logging.info(f"✅ Transcrit {speaker}: {turn.start:.1f}s-{turn.end:.1f}s")
+
+        logging.info(f"🎉 API Simple terminé - {len(segments)} segments transcrits")
+        
+        # Retour structuré pour l'API
+        return {
+            "mode": "simple_api",
+            "status": "completed",
+            "file_info": {
+                "filename": file.filename,
+                "format": file_extension,
+                "duration_seconds": len(audio) / 1000.0
+            },
+            "diarization": {
+                "total_speakers": len(set([seg["speaker"] for seg in segments])),
+                "total_segments": len(segments)
+            },
+            "transcriptions": segments,
+            "settings_used": {
+                "model": current_settings.get("model", "default"),
+                "task": current_settings.get("task", "transcribe"),
+                "language": current_settings.get("lang", "auto")
+            }
+        }
+
+@app.post(
+    "/transcribe_file/", 
+    tags=["🎵 Audio"],
+    summary="🔄 Interface Frontend - Traitement Standard", 
+    description="**Mode 2/3** - Traitement complet audio/vidéo avec diarisation et transcription pour interface utilisateur (sans streaming temps réel)"
+)
+async def transcribe_file(file: UploadFile = File(...)):
+    """
+    Mode Frontend Standard : Pour l'interface utilisateur actuelle
+    - Diarisation complète (séparation des locuteurs)
+    - Transcription haute qualité
+    - Retour optimisé pour le frontend Vue.js
+    - Compatible avec l'interface utilisateur existante
+    """
+    # Vérifier et initialiser les modèles STT si nécessaire
+    global Transcriber_Whisper, diarization_model
+    if Transcriber_Whisper is None or diarization_model is None:
+        logging.info("Initialisation des modèles STT pour transcribe_file...")
+        load_core_models()  # Charger seulement les modèles STT (Whisper + diarisation)
+        
+        # Vérifier que l'initialisation a réussi
+        if Transcriber_Whisper is None or diarization_model is None:
+            logging.error("Échec de l'initialisation des modèles STT")
+            raise HTTPException(status_code=500, detail="Impossible d'initialiser les modèles de transcription. Vérifiez les logs serveur.")
+    
+    async with async_temp_manager_context("transcribe_file") as temp_manager:
         # Lire le fichier uploadé
         file_data = await file.read()
         file_path = temp_manager.create_temp_file(file.filename, file_data)
@@ -987,8 +1468,8 @@ target_maxlen = 5  # Valeur cible définie pour le buffer
 
 buffer = deque(maxlen=initial_maxlen)  # Buffer pour stocker 30 secondes
 
-@app.websocket("/streaming_audio/")
-async def websocket_audio_receiver(websocket: WebSocket):
+@app.websocket("/live_transcription/")
+async def websocket_live_transcription(websocket: WebSocket):
     global buffer# Ajout de buffer comme variable globale pour éviter l'erreur
     await websocket.accept()
     logging.debug("Client connecté, en attente des données")
@@ -1318,6 +1799,16 @@ def run_gpt4o_mini_streaming(prompt: str) -> Generator[str, None, None]:
     description="Pose des questions sur une transcription avec les modèles IA (Chocolatine local ou GPT-4o-mini)"
 )
 async def ask_question(data: QuestionWithTranscription):
+    # Vérifier et charger le modèle IA si nécessaire (seulement pour Chocolatine)
+    global Chocolatine
+    if data.chat_model == "chocolatine" and Chocolatine is None:
+        logging.info("Chargement du modèle IA (Chocolatine) pour ask_question...")
+        load_ai_model()  # Charger seulement le modèle IA
+        
+        if Chocolatine is None:
+            logging.error("Échec du chargement du modèle Chocolatine")
+            raise HTTPException(status_code=500, detail="Impossible de charger le modèle Chocolatine. Vérifiez les logs serveur.")
+    
     # Crée le prompt pour le modèle à partir de la question et de la transcription
     prompt_chocolatine = f""" 
 Vous êtes un assistant qui répond aux questions et demandes basées sur une transcription de conversation.
