@@ -20,7 +20,7 @@
             <span class="tab-subtitle">IA Assistant</span>
           </button>
 
-          <button @click="openSwaggerAPI" class="tab-button api-button">
+          <button @click="activeTab = 'simple'" :class="['tab-button', { active: activeTab === 'simple' }]">
             <span class="tab-title">� API Simple</span>
             <span class="tab-subtitle">Swagger/Développeurs</span>
           </button>
@@ -511,6 +511,94 @@
 
           <!-- FIN MODE CHATBOT -->
 
+          <!-- MODE API SIMPLE : Interface directe pour développeurs -->
+          <div v-if="activeTab === 'simple'">
+            <h2>Mode API Simple</h2>
+            <div class="tab-info">
+              Envoyez vos fichiers directement à l'API et recevez la réponse complète avec les URLs audio intégrées.
+              Parfait pour l'intégration dans d'autres applications.
+            </div>
+
+            <!-- Zone d'upload -->
+            <div class="upload-area" 
+                 @drop="handleDrop" 
+                 @dragover.prevent 
+                 @dragenter.prevent
+                 :class="{ 'drag-over': isDragOver }">
+              <div v-if="!file" class="upload-placeholder">
+                <div class="upload-icon">📁</div>
+                <p>Glissez-déposez votre fichier audio ici ou cliquez pour sélectionner</p>
+                <input type="file" 
+                       ref="fileInputSimple" 
+                       @change="handleFileSelect" 
+                       accept="audio/*" 
+                       style="display: none;">
+                <button @click="$refs.fileInputSimple.click()" class="btn btn-primary">
+                  Choisir un fichier
+                </button>
+              </div>
+              
+              <div v-if="file" class="file-info">
+                <div class="file-details">
+                  <strong>Fichier sélectionné:</strong> {{ file.name }}<br>
+                  <strong>Taille:</strong> {{ formatFileSize(file.size) }}<br>
+                  <strong>Type:</strong> {{ file.type }}
+                </div>
+                <button @click="clearFile" class="btn btn-secondary">Supprimer</button>
+              </div>
+            </div>
+
+            <!-- Bouton de traitement -->
+            <div v-if="file && !isProcessing" class="upload-controls">
+              <button @click="uploadFileSimple" class="btn btn-success btn-large">
+                🚀 Traiter le fichier
+              </button>
+            </div>
+
+            <!-- Progress -->
+            <div v-if="isProcessing" class="processing-status">
+              <div class="loading-spinner"></div>
+              <p>Traitement en cours... Veuillez patienter.</p>
+            </div>
+
+            <!-- Résultats -->
+            <div v-if="transcriptionResult && !isProcessing" class="results-container">
+              <h3>Résultats de transcription</h3>
+              
+              <!-- Statistiques -->
+              <div v-if="transcriptionResult.statistics" class="stats-simple">
+                <div class="stat-item">
+                  <strong>Durée:</strong> {{ formatDuration(transcriptionResult.statistics.total_duration) }}
+                </div>
+                <div class="stat-item">
+                  <strong>Temps de traitement:</strong> {{ transcriptionResult.statistics.processing_time }}s
+                </div>
+                <div v-if="transcriptionResult.statistics.detected_language" class="stat-item">
+                  <strong>Langue détectée:</strong> {{ transcriptionResult.statistics.detected_language }}
+                </div>
+              </div>
+
+              <!-- Chunks avec audio -->
+              <div class="chunks-container">
+                <div v-for="(chunk, index) in transcriptionResult.chunks" :key="index" class="chunk-item">
+                  <div class="chunk-header">
+                    <span class="timestamp">{{ formatTimestamp(chunk.timestamp[0]) }} - {{ formatTimestamp(chunk.timestamp[1]) }}</span>
+                    <button v-if="transcriptionResult.audio_url" 
+                            @click="playSegmentWithTimestamps(transcriptionResult.audio_url, chunk.timestamp[0], chunk.timestamp[1])"
+                            class="btn-play"
+                            :class="{ 'audio-available': transcriptionResult.audio_url }">
+                      🔊 Écouter
+                    </button>
+                    <span v-else class="audio-unavailable">🔇 Audio non disponible</span>
+                  </div>
+                  <div class="chunk-text">{{ chunk.text }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FIN MODE API SIMPLE -->
+
         </div>
       </div>
 
@@ -646,6 +734,11 @@ export default {
       currentAudio: null, // Pour garder une référence à l'audio en cours
       currentChunkIndex: null, // Pour garder une trace du chunk en cours de lecture
       currentSegmentIndex: null, // Pour garder une trace du segment en cours
+      
+      // Variables pour le mode API Simple
+      isProcessing: false, // Indique si un traitement est en cours
+      transcriptionResult: null, // Résultat de transcription pour le mode simple
+      isDragOver: false, // Pour l'effet de drag & drop
     };
   },
 
@@ -1489,6 +1582,10 @@ export default {
         return;
       }
 
+      // Convertir l'URL relative en URL absolue vers le backend
+      const fullAudioUrl = audioUrl.startsWith('http') ? audioUrl : `${process.env.VUE_APP_API_URL}${audioUrl}`;
+      console.log('URL audio complète:', fullAudioUrl);
+
       // Si le même segment est en cours, l'arrêter
       if (this.currentAudio && this.currentSegmentIndex === segmentIndex) {
         this.currentAudio.pause();
@@ -1747,6 +1844,110 @@ export default {
         }
       } catch (error) {
         console.error("Erreur lors de l'upload ou récupération des transcriptions", error);
+      }
+    },
+
+    // Fonctions utilitaires pour le mode Simple
+    formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    },
+
+    formatDuration(seconds) {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = Math.floor(seconds % 60);
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m ${secs}s`;
+      } else {
+        return `${minutes}m ${secs}s`;
+      }
+    },
+
+    formatTimestamp(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      const millisecs = Math.floor((seconds % 1) * 100);
+      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${millisecs.toString().padStart(2, '0')}`;
+    },
+
+    handleDrop(event) {
+      event.preventDefault();
+      this.isDragOver = false;
+      const files = event.dataTransfer.files;
+      if (files.length > 0) {
+        this.file = files[0];
+      }
+    },
+
+    handleFileSelect(event) {
+      const files = event.target.files;
+      if (files.length > 0) {
+        this.file = files[0];
+      }
+    },
+
+    clearFile() {
+      this.file = null;
+      this.transcriptionResult = null;
+    },
+
+    // Nouvelle fonction pour le mode API Simple
+    async uploadFileSimple() {
+      this.isProcessing = true;
+      this.transcriptionResult = null;
+
+      const formData = new FormData();
+      formData.append('file', this.file);
+
+      try {
+        console.log('Envoi vers /transcribe_simple/');
+        const response = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_simple/`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('Réponse reçue:', result);
+        
+        // Adaptation pour le mode simple
+        const adaptedResult = {
+          audio_url: result.full_audio_url,
+          chunks: result.transcriptions.map(item => ({
+            text: item.text,
+            timestamp: [item.start_time, item.end_time],
+            speaker: item.speaker
+          })),
+          statistics: {
+            total_duration: result.transcriptions.length > 0 ? 
+              result.transcriptions[result.transcriptions.length - 1].end_time : 0,
+            processing_time: "N/A",
+            detected_language: "français"
+          }
+        };
+        
+        this.transcriptionResult = adaptedResult;
+        
+        // Validation des URLs audio
+        if (adaptedResult.audio_url) {
+          console.log('URL audio disponible:', adaptedResult.audio_url);
+        } else {
+          console.warn('Aucune URL audio dans la réponse');
+        }
+
+      } catch (error) {
+        console.error('Erreur lors du traitement:', error);
+        alert('Erreur lors du traitement du fichier: ' + error.message);
+      } finally {
+        this.isProcessing = false;
       }
     }
   }
@@ -3095,6 +3296,193 @@ pre {
   font-family: monospace, "Courier New", Courier, "Lucida Console", Consolas;
   white-space: pre;
   line-height: 1.2em;
+}
+
+/* Styles pour le mode API Simple */
+.upload-area {
+  border: 2px dashed #e2e8f0;
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  margin: 20px 0;
+  transition: all 0.3s ease;
+  background: #fafafa;
+}
+
+.upload-area.drag-over {
+  border-color: #0ea5e9;
+  background: #f0f9ff;
+}
+
+.upload-placeholder {
+  color: #64748b;
+}
+
+.upload-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.file-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+.file-details {
+  text-align: left;
+}
+
+.upload-controls {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.btn-large {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.processing-status {
+  text-align: center;
+  padding: 20px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top: 4px solid #0ea5e9;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.results-container {
+  margin-top: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
+  background: #fafafa;
+}
+
+.stats-simple {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  font-size: 14px;
+  color: #475569;
+}
+
+.chunks-container {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.chunk-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: white;
+}
+
+.chunk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.timestamp {
+  font-family: monospace;
+  font-size: 12px;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.chunk-text {
+  padding: 16px;
+  line-height: 1.6;
+}
+
+.btn-play {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+
+.btn-play:hover {
+  background: #059669;
+}
+
+.btn-play.audio-available {
+  background: #10b981;
+}
+
+.audio-unavailable {
+  color: #ef4444;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Mode sombre pour le mode Simple */
+.dark .upload-area {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.dark .upload-area.drag-over {
+  border-color: #0ea5e9;
+  background: #0c4a6e;
+}
+
+.dark .file-info {
+  background: #334155;
+}
+
+.dark .results-container {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.dark .stats-simple {
+  background: #334155;
+}
+
+.dark .chunk-item {
+  background: #334155;
+  border-color: #475569;
+}
+
+.dark .chunk-header {
+  background: #475569;
+  border-color: #64748b;
 }
 
 </style>

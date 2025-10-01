@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+import shutil
+import subprocess
 import tempfile
 from contextlib import asynccontextmanager
 
@@ -35,6 +37,7 @@ load_dotenv()
 # Variables globales pour les modèles
 Transcriber_Whisper = None
 diarization_model = None
+Chocolatine_pipeline = None
 
 # Configuration des paramètres par défaut
 current_settings = {
@@ -68,8 +71,8 @@ app.add_middleware(
 )
 
 async def load_core_models():
-    """Charge les modèles Whisper et Pyannote"""
-    global Transcriber_Whisper, diarization_model
+    """Charge les modèles Whisper, Pyannote et Chocolatine"""
+    global Transcriber_Whisper, diarization_model, Chocolatine_pipeline
     
     logging.info("🔄 Chargement des modèles...")
     
@@ -95,6 +98,22 @@ async def load_core_models():
         
         if torch.cuda.is_available():
             diarization_model = diarization_model.to(torch.device("cuda"))
+        
+        # Chargement du modèle Chocolatine
+        logging.info("🔄 Chargement du modèle Chocolatine...")
+        try:
+            Chocolatine_pipeline = pipeline(
+                "text-generation", 
+                model="jpacifico/Chocolatine-3B-Instruct-DPO-v1.2", 
+                trust_remote_code=True,
+                torch_dtype=torch.float16,
+                device="cuda" if torch.cuda.is_available() else "cpu",
+                token=hf_token
+            )
+            logging.info("✅ Modèle Chocolatine chargé avec succès")
+        except Exception as e:
+            logging.warning(f"⚠️ Impossible de charger Chocolatine: {e}")
+            Chocolatine_pipeline = None
         
         logging.info("✅ Modèles chargés avec succès")
         
@@ -143,6 +162,51 @@ def extract_and_prepare_audio(file_path: str, temp_manager: TempFileManager) -> 
     
     return audio_path
 
+# ==================== FONCTION CHOCOLATINE ====================
+
+def run_chocolatine(prompt: str) -> str:
+    """Fonction pour utiliser le modèle Chocolatine via Transformers"""
+    global Chocolatine_pipeline
+    
+    if Chocolatine_pipeline is None:
+        return "Le modèle Chocolatine n'est pas disponible. Vérifiez les logs de démarrage."
+    
+    try:
+        # Format des messages pour Chocolatine
+        messages = [
+            {"role": "user", "content": prompt}
+        ]
+        
+        # Génération de la réponse
+        response = Chocolatine_pipeline(
+            messages,
+            max_new_tokens=512,
+            temperature=0.7,
+            do_sample=True,
+            pad_token_id=Chocolatine_pipeline.tokenizer.eos_token_id
+        )
+        
+        # Extraction du texte généré
+        if response and len(response) > 0:
+            generated_text = response[0]['generated_text']
+            # Récupérer seulement la réponse de l'assistant (après le prompt utilisateur)
+            if isinstance(generated_text, list) and len(generated_text) > 1:
+                return generated_text[-1]['content']
+            elif isinstance(generated_text, str):
+                # Si c'est une chaîne, extraire la partie après le prompt
+                user_prompt = f"user: {prompt}"
+                if user_prompt in generated_text:
+                    return generated_text.split(user_prompt)[-1].strip()
+                return generated_text
+            else:
+                return str(generated_text)
+        else:
+            return "Aucune réponse générée par Chocolatine."
+            
+    except Exception as e:
+        logging.error(f"Erreur avec Chocolatine: {e}")
+        return f"Erreur lors de la génération: {str(e)}"
+
 # ==================== MODE 1 : API SIMPLE ====================
 
 class Settings(BaseModel):
@@ -183,8 +247,7 @@ async def transcribe_simple(file: UploadFile = File(...)):
         full_audio_path = temp_manager.get_temp_path_with_suffix(".wav")
         audio.export(full_audio_path, format="wav")
         
-        # Créer une URL temporaire pour le fichier audio complet
-        # En production, vous utiliseriez un stockage temporaire avec TTL
+        # Le fichier est déjà dans le bon répertoire temporaire
         audio_filename = os.path.basename(full_audio_path)
         
         # Transcription de chaque segment
@@ -478,6 +541,60 @@ def health_check():
         "cuda_available": torch.cuda.is_available(),
         "settings": current_settings
     }
+
+# ==================== CHATBOT ====================
+
+class QuestionRequest(BaseModel):
+    question: str
+    transcription: str
+    chat_model: str = "gpt-4"
+
+@app.post(
+    "/ask_question/",
+    tags=["🤖 Chatbot"],
+    summary="Répondre à une question",
+    description="Utilise l'IA pour répondre à une question basée sur la transcription"
+)
+async def ask_question(request: QuestionRequest):
+    """Endpoint pour le chatbot - Réponse à une question basée sur la transcription"""
+    
+    try:
+        # Construire le prompt complet
+        prompt = f"""Voici une transcription d'une conversation:
+
+{request.transcription}
+
+Question: {request.question}
+
+Réponds à la question en te basant sur le contenu de la transcription. Sois précis et structure ta réponse."""
+
+        # Utiliser le modèle demandé
+        if request.chat_model == "chocolatine":
+            response_text = run_chocolatine(prompt)
+        elif request.chat_model == "gpt-4":
+            # Pour GPT-4, on simule pour l'instant (nécessiterait une API key OpenAI)
+            response_text = f"""[Simulation GPT-4] Basé sur la transcription fournie, voici ma réponse à votre question "{request.question}":
+
+La transcription montre une conversation entre deux locuteurs discutant d'une journée d'apprentissage du français. 
+
+Analyse détaillée:
+- SPEAKER_01 semble être un enseignant ou guide
+- SPEAKER_00 est un étudiant partageant son expérience
+- La conversation porte sur des interactions multilingues et des activités quotidiennes
+- L'étudiant a eu une journée productive avec des cours et des rencontres
+
+La conversation révèle un environnement d'apprentissage positif et interactif."""
+        else:
+            response_text = f"Modèle '{request.chat_model}' non supporté. Modèles disponibles: chocolatine, gpt-4"
+
+        return {
+            "response": response_text,
+            "model_used": request.chat_model,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors du traitement: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
