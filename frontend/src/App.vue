@@ -1502,53 +1502,87 @@ export default {
       formData.append('file', this.file);
 
       try {
-        // Utiliser la variable d'environnement pour l'URL de l'API
-        const response = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_file/`, {
+        // Préparer les données pour l'upload via FormData en POST
+        const uploadResponse = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_streaming/`, {
           method: 'POST',
           body: formData
         });
 
-        if (!response.ok) {
-          console.error("Erreur dans la réponse du serveur :", response.statusText);
+        if (!uploadResponse.ok) {
+          console.error("Erreur dans la réponse du serveur :", uploadResponse.statusText);
           return;
         }
-        
-        // Traitement simple de la réponse JSON (non-streaming)
-        const data = await response.json();
-        console.log("Transcription reçue:", data);
-        
-        // Arrêter la boucle de progression
+
+        // Lire la réponse streaming
+        const reader = uploadResponse.body.getReader();
+        const decoder = new TextDecoder();
+
+        // Arrêter la boucle de progression initiale
         this.stopProgressLoop();
-        
-        // Traiter les transcriptions reçues
-        if (data.transcriptions && Array.isArray(data.transcriptions)) {
-          // Réinitialiser les données
-          this.transcriptions = [];
-          this.diarization = [];
-          
-          // Traiter chaque segment de transcription
-          data.transcriptions.forEach(segment => {
-            this.transcriptions.push(segment);
-            
-            // Créer une entrée de diarisation correspondante
-            this.diarization.push({
-              speaker: segment.speaker,
-              start_time: segment.start_time,
-              end_time: segment.end_time
-            });
-          });
-          
-          // Calculer les statistiques
-          this.totalDuration = this.diarization.reduce((acc, entry) => acc + (entry.end_time - entry.start_time), 0);
-          this.calculateSpeechStats();
-          
-          // Mise à jour de la progression
-          this.transcriptionProgress = 100;
-          this.progressMessage = "Transcription terminée !";
-          
-          console.log("Transcription complète traitée avec succès");
-        } else {
-          console.error("Format de réponse inattendu:", data);
+
+        // Traiter le flux de données
+        try {
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.substring(6));
+                  console.log("Données reçues:", data);
+
+                  // Traiter selon le status
+                  if (data.status === 'started') {
+                    this.progressMessage = data.message;
+                  } else if (data.status === 'audio_ready') {
+                    this.progressMessage = data.message;
+                  } else if (data.status === 'diarization_start') {
+                    this.progressMessage = data.message;
+                  } else if (data.status === 'diarization_done') {
+                    this.diarization = data.diarization;
+                    this.progressMessage = "Diarisation terminée - Transcription en cours...";
+                  } else if (data.status === 'transcribing') {
+                    this.transcriptionProgress = data.progress;
+                    this.progressMessage = `Transcription segment ${data.segment}/${data.total} (${data.progress.toFixed(1)}%)`;
+                  } else if (data.status === 'segment_done') {
+                    // Ajouter le segment transcrit
+                    const segment = data.segment;
+                    this.transcriptions.push({
+                      speaker: segment.speaker,
+                      text: { chunks: [{ text: segment.text, timestamp: [segment.start_time, segment.end_time] }] },
+                      start_time: segment.start_time,
+                      end_time: segment.end_time,
+                      audio_url: null // Pas d'URL audio en mode streaming pour l'instant
+                    });
+                  } else if (data.status === 'completed') {
+                    this.transcriptionProgress = 100;
+                    this.progressMessage = "Transcription terminée !";
+                    
+                    // Calculer les statistiques finales
+                    if (this.diarization) {
+                      this.calculateSpeechStats();
+                    }
+                    
+                    console.log("Transcription streaming terminée avec succès");
+                    break;
+                  } else if (data.status === 'error') {
+                    console.error("Erreur du serveur:", data.message);
+                    this.progressMessage = `Erreur: ${data.message}`;
+                  }
+
+                } catch (parseError) {
+                  console.log("Ligne non-JSON ignorée:", line);
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
         }
       } catch (error) {
         console.error("Erreur lors de l'upload ou récupération des transcriptions", error);
