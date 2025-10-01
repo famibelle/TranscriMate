@@ -126,7 +126,7 @@ export default {
 
       try {
         // Utilise fetch pour envoyer une requête POST et obtenir la réponse complète
-        const response = await fetch('/ask_question/', {
+        const response = await fetch(`${process.env.VUE_APP_API_URL}/ask_question/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

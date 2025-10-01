@@ -1472,9 +1472,8 @@ export default {
       formData.append('file', this.file);
 
       try {
-        //  const response = await fetch('http://localhost:8000/uploadfile/', {
-        // const response = await fetch(`${process.env.VUE_APP_API_URL}/uploadfile/`, {
-          const response = await fetch(`/uploadfile/`, {
+        // Utiliser la variable d'environnement pour l'URL de l'API
+        const response = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_streaming/`, {
           method: 'POST',
           body: formData
         });
