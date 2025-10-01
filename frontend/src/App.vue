@@ -140,8 +140,10 @@
                     <!-- Texte complet du segment entouré dans une bulle -->
                     <div class="message-body">
                       <div class="chunk-container">
-                        <span v-for="(chunk, i) in segment.text.chunks" :key="i" class="chunk"
-                          @click="isTranscriptionComplete ? playOrPauseChunk(segment.audio_url, chunk.timestamp[0], chunk.timestamp[1], i) : null">
+                        <span v-for="(chunk, i) in segment.text.chunks" :key="i" 
+                          :class="['chunk', { 'audio-available': isTranscriptionComplete && segment.audio_url, 'no-audio': !segment.audio_url }]"
+                          @click="isTranscriptionComplete && segment.audio_url ? playSegmentWithTimestamps(segment.audio_url, segment.segment_start || segment.start_time, segment.segment_end || segment.end_time, `${index}-${i}`) : null"
+                          :title="segment.audio_url ? 'Cliquer pour écouter ce segment' : 'Audio non disponible en mode streaming'">
                           {{ chunk.text }}<span v-if="i < segment.text.chunks.length - 1"> </span>
                         </span>
                       </div>
@@ -643,6 +645,7 @@ export default {
       oldSpeakerName: '',  // Stocker l'ancien nom du speaker avant l'édition
       currentAudio: null, // Pour garder une référence à l'audio en cours
       currentChunkIndex: null, // Pour garder une trace du chunk en cours de lecture
+      currentSegmentIndex: null, // Pour garder une trace du segment en cours
     };
   },
 
@@ -650,19 +653,11 @@ export default {
     // Appeler /initialize/ avant que l'application ne soit affichée complètement
     await this.initializeModels();
 
-    // Ajouter des écouteurs d'événements globaux pour détecter l'activité de l'utilisateur
-    window.addEventListener("mousemove", this.keepAlive);
-    window.addEventListener("click", this.keepAlive);
-    window.addEventListener("keydown", this.keepAlive);
-    window.addEventListener("touchstart", this.keepAlive);
+    // Event listeners keep-alive supprimés - non nécessaires
   },
 
   beforeUnmount() {
-    // Supprimer les écouteurs d'événements pour éviter des fuites de mémoire
-    window.removeEventListener("mousemove", this.keepAlive);
-    window.removeEventListener("click", this.keepAlive);
-    window.removeEventListener("keydown", this.keepAlive);
-    window.removeEventListener("touchstart", this.keepAlive);
+    // Event listeners keep-alive supprimés - nettoyage non nécessaire
   },
 
   computed: {
@@ -703,14 +698,7 @@ export default {
       console.log('📋 Utilisez l\'endpoint /transcribe_simple/ pour l\'API pure');
     },
 
-    async keepAlive() {
-      try {
-        // Appeler l'endpoint /keep_alive/ pour mettre à jour l'activité
-        await axios.get("/keep_alive/");
-      } catch (error) {
-        console.error("Erreur lors de la mise à jour de l'activité :", error);
-      }
-    },
+    // Fonction keep-alive supprimée - non nécessaire pour cette application
 
 
     toggleTask() {
@@ -1168,6 +1156,12 @@ export default {
     },
 
     loadAudioMetadata(audioUrl) {
+      // Vérifier si l'URL audio est valide
+      if (!audioUrl || audioUrl === null || audioUrl === 'null') {
+        console.warn("Aucune URL audio disponible pour charger les métadonnées");
+        return;
+      }
+
       const audio = new Audio(audioUrl);
       audio.onloadedmetadata = () => {
         this.audioDuration = audio.duration;  // Récupérer la durée totale de l'audio
@@ -1194,27 +1188,56 @@ export default {
     },
 
     toggleSpeakerAudio(segment, index) {
-      // Si un autre passage est en lecture, l'arrêter
-      if (this.audio && this.playingIndex !== index) {
-        this.audio.pause();  // Arrêter l'audio en cours
-        this.audio = null;
-        this.playingIndex = null;
+      // Vérifier si l'URL audio est valide
+      if (!segment.audio_url || segment.audio_url === null || segment.audio_url === 'null') {
+        console.warn("Aucune URL audio disponible pour ce segment");
+        return;
       }
 
-      // Si le passage est déjà en cours de lecture, l'arrêter
-      if (this.playingIndex === index) {
+      // Si le même segment est déjà en cours de lecture, l'arrêter
+      if (this.playingIndex === index && this.audio) {
         this.audio.pause();
+        this.audio = null;
         this.playingIndex = null;
-      } else {
-        // Sinon, démarrer la lecture du segment audio
+        return;
+      }
+
+      // Arrêter tout audio en cours
+      if (this.audio) {
+        this.audio.pause();
+        this.audio = null;
+      }
+
+      // Démarrer la lecture du nouveau segment
+      try {
         this.audio = new Audio(segment.audio_url);
-        this.audio.play();
         this.playingIndex = index;
 
-        // Gérer la fin de la lecture pour remettre l'icône ▶️
+        // Gérer les événements de l'audio
         this.audio.onended = () => {
-          this.playingIndex = null;  // Remettre l'icône à ▶️ quand l'audio est terminé
+          this.playingIndex = null;
         };
+
+        this.audio.onerror = (e) => {
+          console.error("Erreur de lecture audio:", e);
+          this.playingIndex = null;
+          this.audio = null;
+        };
+
+        // Lancer la lecture avec gestion d'erreur
+        const playPromise = this.audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error("Erreur lors du play():", error);
+            this.playingIndex = null;
+            this.audio = null;
+          });
+        }
+
+      } catch (error) {
+        console.error("Erreur création Audio:", error);
+        this.playingIndex = null;
+        this.audio = null;
       }
     },
 
@@ -1269,30 +1292,65 @@ export default {
     // },
 
     playOrPauseChunk(audioUrl, startTime, endTime, chunkIndex) {
-      // Si un audio est déjà en cours de lecture et qu'il s'agit du même chunk, on le met en pause
+      // Vérifier si l'URL audio est valide
+      if (!audioUrl || audioUrl === null || audioUrl === 'null') {
+        console.warn("Aucune URL audio disponible pour ce segment");
+        return;
+      }
+
+      // Si le même chunk est déjà en cours de lecture, l'arrêter
       if (this.currentAudio && this.currentChunkIndex === chunkIndex) {
         this.currentAudio.pause();
-        this.currentAudio = null; // Réinitialiser l'état
+        this.currentAudio = null;
         this.currentChunkIndex = null;
-      } else {
-        // Si un autre chunk est en cours de lecture, on le met en pause avant d'en jouer un nouveau
-        if (this.currentAudio) {
-          this.currentAudio.pause();
-        }
+        return;
+      }
 
+      // Arrêter tout audio en cours
+      if (this.currentAudio) {
+        this.currentAudio.pause();
+        this.currentAudio = null;
+      }
+
+      try {
         // Créer un nouvel objet Audio pour jouer le nouveau chunk
         const audio = new Audio(audioUrl);
-        audio.currentTime = startTime;
-        audio.play();
+        
+        // Gérer les événements d'erreur
+        audio.onerror = (e) => {
+          console.error("Erreur de lecture audio chunk:", e);
+          this.currentAudio = null;
+          this.currentChunkIndex = null;
+        };
 
-        // Définir un timeout pour arrêter l'audio à la fin du chunk
-        setTimeout(() => {
-          audio.pause();
-        }, (endTime - startTime) * 1000); // Convertir le temps en millisecondes
+        // Définir le temps de départ
+        audio.currentTime = startTime;
+        
+        // Lancer la lecture avec gestion d'erreur
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            // Définir un timeout pour arrêter l'audio à la fin du chunk
+            setTimeout(() => {
+              if (audio && !audio.paused) {
+                audio.pause();
+              }
+            }, (endTime - startTime) * 1000);
+          }).catch(error => {
+            console.error("Erreur lors du play() chunk:", error);
+            this.currentAudio = null;
+            this.currentChunkIndex = null;
+          });
+        }
 
         // Stocker la référence de l'audio en cours et l'index du chunk
         this.currentAudio = audio;
         this.currentChunkIndex = chunkIndex;
+
+      } catch (error) {
+        console.error("Erreur création Audio chunk:", error);
+        this.currentAudio = null;
+        this.currentChunkIndex = null;
       }
     },
 
@@ -1368,8 +1426,31 @@ export default {
 
     // Méthode pour jouer l'audio d'un segment complet
     playAudio(audioUrl) {
-      const audio = new Audio(audioUrl);  // Créer une instance d'Audio avec l'URL du segment
-      audio.play();  // Jouer l'audio
+      // Vérifier si l'URL audio est valide
+      if (!audioUrl || audioUrl === null || audioUrl === 'null') {
+        console.warn("Aucune URL audio disponible");
+        return;
+      }
+
+      try {
+        const audio = new Audio(audioUrl);
+        
+        // Gérer les erreurs
+        audio.onerror = (e) => {
+          console.error("Erreur de lecture audio:", e);
+        };
+        
+        // Lancer la lecture avec gestion d'erreur
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error("Erreur lors du play():", error);
+          });
+        }
+        
+      } catch (error) {
+        console.error("Erreur création Audio:", error);
+      }
     },
 
     // Méthode pour copier la transcription complète dans le presse-papiers
@@ -1400,19 +1481,82 @@ export default {
       }
     },
 
-    // Méthode pour lire un chunk spécifique
+    // Méthode optimisée pour lire un segment avec timestamps
+    playSegmentWithTimestamps(audioUrl, startTime, endTime, segmentIndex) {
+      // Vérifier si l'URL audio est valide
+      if (!audioUrl || audioUrl === null || audioUrl === 'null') {
+        console.warn("Aucune URL audio disponible pour ce segment");
+        return;
+      }
+
+      // Si le même segment est en cours, l'arrêter
+      if (this.currentAudio && this.currentSegmentIndex === segmentIndex) {
+        this.currentAudio.pause();
+        this.currentAudio = null;
+        this.currentSegmentIndex = null;
+        return;
+      }
+
+      // Arrêter tout audio en cours
+      if (this.currentAudio) {
+        this.currentAudio.pause();
+        this.currentAudio = null;
+      }
+
+      try {
+        const audio = new Audio(audioUrl);
+        this.currentAudio = audio;
+        this.currentSegmentIndex = segmentIndex;
+
+        // Gérer les événements
+        audio.onerror = (e) => {
+          console.error("Erreur de lecture audio segment:", e);
+          this.currentAudio = null;
+          this.currentSegmentIndex = null;
+        };
+
+        audio.onloadeddata = () => {
+          // Positionner au début du segment
+          audio.currentTime = startTime;
+          
+          // Lancer la lecture
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              // Programmer l'arrêt à la fin du segment
+              const segmentDuration = (endTime - startTime) * 1000;
+              setTimeout(() => {
+                if (audio && !audio.paused && this.currentSegmentIndex === segmentIndex) {
+                  audio.pause();
+                  this.currentAudio = null;
+                  this.currentSegmentIndex = null;
+                }
+              }, segmentDuration);
+            }).catch(error => {
+              console.error("Erreur lors du play() segment:", error);
+              this.currentAudio = null;
+              this.currentSegmentIndex = null;
+            });
+          }
+        };
+
+        // Fallback si les métadonnées ne se chargent pas rapidement
+        setTimeout(() => {
+          if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
+            audio.currentTime = startTime;
+          }
+        }, 100);
+
+      } catch (error) {
+        console.error("Erreur création Audio segment:", error);
+        this.currentAudio = null;
+        this.currentSegmentIndex = null;
+      }
+    },
+
+    // Méthode pour lire un chunk spécifique (ancienne version gardée pour compatibilité)
     playChunk(audioUrl, start, end) {
-      const audio = new Audio(audioUrl);
-
-      // Démarre la lecture à partir du timestamp 'start'
-      audio.currentTime = start;
-      audio.play();
-
-      // Arrêter la lecture après la durée du chunk
-      const duration = (end - start) * 1000;
-      setTimeout(() => {
-        audio.pause();
-      }, duration);
+      this.playSegmentWithTimestamps(audioUrl, start, end, Math.random());
     },
 
     // Gère le changement de fichier
@@ -1457,12 +1601,29 @@ export default {
 
     // Lire ou mettre en pause l'audio
     togglePlay() {
-      if (this.isPlaying) {
-        this.audio.pause();
-      } else {
-        this.audio.play();
+      if (!this.audio) return;
+      
+      try {
+        if (this.isPlaying) {
+          this.audio.pause();
+          this.isPlaying = false;
+        } else {
+          const playPromise = this.audio.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              this.isPlaying = true;
+            }).catch(error => {
+              console.error("Erreur lors du play() toggle:", error);
+              this.isPlaying = false;
+            });
+          } else {
+            this.isPlaying = true;
+          }
+        }
+      } catch (error) {
+        console.error("Erreur togglePlay:", error);
+        this.isPlaying = false;
       }
-      this.isPlaying = !this.isPlaying;
     },
 
     // Rechercher un moment spécifique dans l'audio
@@ -1747,10 +1908,7 @@ button:hover {
   position: relative; /* Nécessaire pour positionner l'infobulle */
 }
 
-.chunk:hover {
-  background-color: yellow;
-  /* Ajouter un surlignage doux lors du hover */
-}
+/* Hover par défaut déplacé vers les classes spécifiques audio-available et no-audio */
 
 .chunk::after {
   content: "🖱️ Clic pour écouter";
@@ -1774,6 +1932,30 @@ button:hover {
 .chunk:hover::after {
   opacity: 0.9; /* Affiche l'infobulle */
   transition-delay: 0.4s; /* Délai d'apparition de 400 ms */
+}
+
+/* Styles pour les chunks avec audio disponible */
+.chunk.audio-available {
+  cursor: pointer;
+}
+
+.chunk.audio-available:hover {
+  background-color: yellow;
+}
+
+/* Styles pour les chunks sans audio */
+.chunk.no-audio {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.chunk.no-audio:hover {
+  background-color: #f5f5f5;
+}
+
+.chunk.no-audio::after {
+  content: "🚫 Audio non disponible";
+  background-color: #999;
 }
 
 /* Style pour rendre le texte du speaker cliquable */

@@ -9,7 +9,8 @@ import torch
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 from pydantic import BaseModel, StrictStr
@@ -178,6 +179,14 @@ async def transcribe_simple(file: UploadFile = File(...)):
         with ProgressHook() as hook:
             diarization = diarization_model(audio_path, hook=hook)
         
+        # Sauvegarder le fichier audio complet pour accès ultérieur
+        full_audio_path = temp_manager.get_temp_path_with_suffix(".wav")
+        audio.export(full_audio_path, format="wav")
+        
+        # Créer une URL temporaire pour le fichier audio complet
+        # En production, vous utiliseriez un stockage temporaire avec TTL
+        audio_filename = os.path.basename(full_audio_path)
+        
         # Transcription de chaque segment
         logging.info("🔄 Transcription des segments...")
         segments = []
@@ -203,14 +212,18 @@ async def transcribe_simple(file: UploadFile = File(...)):
                 "speaker": speaker,
                 "text": transcription["text"],
                 "start_time": turn.start,
-                "end_time": turn.end
+                "end_time": turn.end,
+                "audio_url": f"/temp_audio/{audio_filename}",  # URL pour le fichier complet
+                "segment_start": turn.start,  # Timestamps pour extraction côté client
+                "segment_end": turn.end
             })
         
         logging.info("✅ Transcription simple terminée")
         return {
             "mode": "simple",
             "diarization": convert_tracks_to_json(diarization),
-            "transcriptions": segments
+            "transcriptions": segments,
+            "full_audio_url": f"/temp_audio/{audio_filename}"  # URL du fichier complet
         }
 
 # ==================== MODE 2 : STREAMING ====================
@@ -404,6 +417,36 @@ async def live_transcription(websocket: WebSocket):
             await websocket.send_json({"status": "error", "message": str(e)})
         except:
             pass
+
+# ==================== ROUTES AUDIO ====================
+
+# Stockage temporaire des fichiers audio (en production, utilisez Redis ou un cache approprié)
+temp_audio_cache = {}
+
+@app.get(
+    "/temp_audio/{filename}",
+    tags=["🎵 Audio"],
+    summary="Récupération d'un fichier audio temporaire",
+    description="Retourne un fichier audio temporaire par son nom"
+)
+async def get_temp_audio(filename: str):
+    """Retourne un fichier audio temporaire"""
+    
+    # Construire le chemin du fichier (dans /temp ou votre répertoire temporaire)
+    temp_dir = tempfile.gettempdir()
+    file_path = os.path.join(temp_dir, filename)
+    
+    # Vérifier que le fichier existe
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Fichier audio non trouvé")
+    
+    # Retourner le fichier
+    return FileResponse(
+        file_path,
+        media_type="audio/wav",
+        filename=filename,
+        headers={"Cache-Control": "public, max-age=3600"}  # Cache 1 heure
+    )
 
 # ==================== ROUTES DE CONFIGURATION ====================
 
