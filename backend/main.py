@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
-from pydantic import BaseModel, StrictStr
+from pydantic import BaseModel, StrictStr, Field
 from pydub import AudioSegment
 from starlette.websockets import WebSocketDisconnect
 from transformers import pipeline
@@ -545,9 +545,30 @@ def health_check():
 # ==================== CHATBOT ====================
 
 class QuestionRequest(BaseModel):
-    question: str
-    transcription: str
-    chat_model: str = "gpt-4"
+    question: str = Field(
+        default="Présente-toi",
+        description="La question à poser à l'IA",
+        example="Présente-toi"
+    )
+    transcription: str = Field(
+        default="Comment on appel un pain au chocolat dans le sud ?",
+        description="Le texte de transcription sur lequel baser la réponse",
+        example="Comment on appel un pain au chocolat dans le sud ?"
+    )
+    chat_model: str = Field(
+        default="chocolatine",
+        description="Le modèle IA à utiliser (chocolatine ou gpt-4)",
+        example="chocolatine"
+    )
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "question": "Présente-toi",
+                "transcription": "Comment on appel un pain au chocolat dans le sud ?",
+                "chat_model": "chocolatine"
+            }
+        }
 
 @app.post(
     "/ask_question/",
