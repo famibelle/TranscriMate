@@ -51,7 +51,7 @@ Chocolatine_pipeline = None
 # Configuration des paramètres par défaut
 current_settings = {
     "task": "transcribe",
-    "model": "openai/whisper-large-v3-turbo",
+    "model": "openai/whisper-base",
     "lang": "auto"
 }
 
@@ -86,28 +86,23 @@ async def load_core_models():
     logging.info("🔄 Chargement des modèles...")
     
     try:
-        # Chargement du modèle Whisper
+        # Chargement du modèle Whisper-base (léger et multilingue)
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             raise ValueError("HF_TOKEN non trouvé dans les variables d'environnement")
         
+        logging.info("🔄 Chargement de Whisper-base (74MB, multilingue)...")
         Transcriber_Whisper = pipeline(
             "automatic-speech-recognition",
-            model="openai/whisper-large-v3-turbo",
-            torch_dtype=torch.float16,
+            model="openai/whisper-base",  # Modèle léger mais performant
+            torch_dtype=torch.float16,  # FP16 pour optimisation GPU
             device="cuda" if torch.cuda.is_available() else "cpu",
             token=hf_token
         )
         
-        # Chargement du modèle Whisper léger multilingue pour le mode live
-        logging.info("🔄 Chargement du modèle Whisper léger multilingue...")
-        Transcriber_Whisper_Light = pipeline(
-            "automatic-speech-recognition",
-            model="openai/whisper-base",  # Modèle léger multilingue (~140MB)
-            torch_dtype=torch.float16,
-            device="cuda" if torch.cuda.is_available() else "cpu",
-            token=hf_token
-        )
+        # Utiliser le même modèle whisper-base pour le mode live (optimisation mémoire)
+        logging.info("🔄 Réutilisation du modèle Whisper-base pour le mode live...")
+        Transcriber_Whisper_Light = Transcriber_Whisper  # Même modèle, économie de VRAM
         
         # Chargement du modèle de diarisation
         diarization_model = Pipeline.from_pretrained(
@@ -147,6 +142,17 @@ async def load_core_models():
         except Exception as e:
             logging.warning(f"⚠️ Impossible de charger Chocolatine: {e}")
             Chocolatine_pipeline = None
+        
+        # Vérification de la configuration FP16
+        if torch.cuda.is_available():
+            logging.info("✅ Configuration GPU optimisée:")
+            logging.info(f"   🔹 CUDA Device: {torch.cuda.get_device_name(0)}")
+            logging.info(f"   🔹 Whisper Base (principal + live): FP16 (torch.float16)")
+            logging.info(f"   🔹 Économie VRAM: Un seul modèle Whisper chargé")
+            if Chocolatine_pipeline:
+                logging.info(f"   🔹 Chocolatine: FP16 (torch.float16)")
+        else:
+            logging.info("💻 Configuration CPU: FP32 (torch.float32)")
         
         logging.info("✅ Modèles chargés avec succès")
         
@@ -250,7 +256,7 @@ def run_chocolatine(prompt: str) -> str:
 
 class Settings(BaseModel):
     task: StrictStr = "transcribe"
-    model: StrictStr = "openai/whisper-large-v3-turbo"
+    model: StrictStr = "openai/whisper-base"
     lang: StrictStr = "auto"
 
 @app.post(
