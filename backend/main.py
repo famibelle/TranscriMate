@@ -36,6 +36,7 @@ load_dotenv()
 
 # Variables globales pour les modèles
 Transcriber_Whisper = None
+Transcriber_Whisper_Light = None  # Modèle léger pour le mode live
 diarization_model = None
 Chocolatine_pipeline = None
 
@@ -72,7 +73,7 @@ app.add_middleware(
 
 async def load_core_models():
     """Charge les modèles Whisper, Pyannote et Chocolatine"""
-    global Transcriber_Whisper, diarization_model, Chocolatine_pipeline
+    global Transcriber_Whisper, Transcriber_Whisper_Light, diarization_model, Chocolatine_pipeline
     
     logging.info("🔄 Chargement des modèles...")
     
@@ -85,6 +86,16 @@ async def load_core_models():
         Transcriber_Whisper = pipeline(
             "automatic-speech-recognition",
             model="openai/whisper-large-v3-turbo",
+            torch_dtype=torch.float16,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+            token=hf_token
+        )
+        
+        # Chargement du modèle Whisper léger multilingue pour le mode live
+        logging.info("🔄 Chargement du modèle Whisper léger multilingue...")
+        Transcriber_Whisper_Light = pipeline(
+            "automatic-speech-recognition",
+            model="openai/whisper-base",  # Modèle léger multilingue (~140MB)
             torch_dtype=torch.float16,
             device="cuda" if torch.cuda.is_available() else "cpu",
             token=hf_token
@@ -390,18 +401,23 @@ async def live_transcription(websocket: WebSocket):
     logging.info("Client WebSocket connecté pour transcription live")
     
     try:
-        # Vérifier les modèles
-        if Transcriber_Whisper is None:
+        # Vérifier les modèles (priorité au modèle léger pour le live)
+        whisper_model = Transcriber_Whisper_Light if Transcriber_Whisper_Light is not None else Transcriber_Whisper
+        if whisper_model is None:
             await websocket.send_json({
                 "status": "error",
-                "message": "Modèle Whisper non initialisé"
+                "message": "Aucun modèle Whisper disponible"
             })
             return
         
-        # Confirmer la connexion
+        # Confirmer la connexion avec informations sur le modèle
+        model_info = "whisper-base-light" if whisper_model == Transcriber_Whisper_Light else "whisper-large"
         await websocket.send_json({
             "status": "connected",
-            "message": "WebSocket connecté - Mode temps réel actif"
+            "message": f"WebSocket connecté - Mode temps réel actif avec {model_info}",
+            "model": model_info,
+            "supports_multilingual": True,
+            "buffer_duration_seconds": 2.0
         })
         
         # Buffer pour accumuler l'audio
@@ -436,20 +452,28 @@ async def live_transcription(websocket: WebSocket):
                     with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp_file:
                         combined_audio.export(tmp_file.name, format="wav")
                         
-                        # Transcrire avec Whisper
-                        transcription = Transcriber_Whisper(
+                        # Transcrire avec Whisper léger
+                        transcription = whisper_model(
                             tmp_file.name,
-                            return_timestamps=False,
+                            return_timestamps=True,  # Garder les timestamps pour plus d'infos
                             generate_kwargs={"task": current_settings["task"]}
                         )
                         
-                        # Envoyer la transcription
-                        await websocket.send_json({
+                        # Envoyer la transcription avec plus d'informations
+                        response_data = {
                             "status": "transcription",
-                            "text": transcription["text"],
-                            "duration": buffer_duration,
-                            "chunk_duration": target_duration
-                        })
+                            "text": transcription["text"].strip(),
+                            "duration": round(buffer_duration, 2),
+                            "chunk_duration": target_duration,
+                            "model_used": "whisper-base-light" if whisper_model == Transcriber_Whisper_Light else "whisper-large",
+                            "timestamp": round(asyncio.get_event_loop().time(), 2)
+                        }
+                        
+                        # Ajouter les chunks si disponibles
+                        if "chunks" in transcription:
+                            response_data["chunks"] = transcription["chunks"]
+                            
+                        await websocket.send_json(response_data)
                         
                         # Le fichier sera automatiquement supprimé à la fin du 'with'
                     
