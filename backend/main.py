@@ -113,14 +113,27 @@ async def load_core_models():
         # Chargement du modèle Chocolatine
         logging.info("🔄 Chargement du modèle Chocolatine...")
         try:
-            Chocolatine_pipeline = pipeline(
-                "text-generation", 
-                model="jpacifico/Chocolatine-3B-Instruct-DPO-v1.2", 
-                trust_remote_code=True,
-                torch_dtype=torch.float16,
-                device="cuda" if torch.cuda.is_available() else "cpu",
-                token=hf_token
-            )
+            pipeline_kwargs = {
+                "task": "text-generation",
+                "model": "jpacifico/Chocolatine-3B-Instruct-DPO-v1.2", 
+                "trust_remote_code": True,
+                "torch_dtype": torch.float16,
+                "token": hf_token
+            }
+            
+            # Configuration GPU optimisée
+            if torch.cuda.is_available():
+                pipeline_kwargs.update({
+                    "device_map": "auto",  # Distribution automatique sur GPU(s)
+                    "torch_dtype": torch.float16  # Half precision pour économiser VRAM
+                })
+                logging.info("🚀 Configuration GPU activée pour Chocolatine")
+            else:
+                pipeline_kwargs["device"] = "cpu"
+                pipeline_kwargs["torch_dtype"] = torch.float32
+                logging.info("💻 Configuration CPU pour Chocolatine")
+            
+            Chocolatine_pipeline = pipeline(**pipeline_kwargs)
             logging.info("✅ Modèle Chocolatine chargé avec succès")
         except Exception as e:
             logging.warning(f"⚠️ Impossible de charger Chocolatine: {e}")
