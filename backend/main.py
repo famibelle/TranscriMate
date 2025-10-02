@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from contextlib import asynccontextmanager
 
 import torch
@@ -27,9 +28,16 @@ from temp_manager import TempFileManager, async_temp_manager_context
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
 
-# Configuration CUDA
+# Configuration CUDA pour performance maximale
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
+torch.backends.cudnn.benchmark = True  # Optimise pour tailles fixes
+torch.backends.cuda.enable_flash_sdp(True)  # Flash Attention si disponible
+
+# Optimisations mémoire
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Éviter les warnings
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -117,20 +125,27 @@ async def load_core_models():
                 "task": "text-generation",
                 "model": "jpacifico/Chocolatine-3B-Instruct-DPO-v1.2", 
                 "trust_remote_code": True,
-                "torch_dtype": torch.float16,
                 "token": hf_token
             }
             
-            # Configuration GPU optimisée
+            # Configuration GPU optimisée pour performance maximale
             if torch.cuda.is_available():
                 pipeline_kwargs.update({
-                    "device_map": "auto",  # Distribution automatique sur GPU(s)
-                    "torch_dtype": torch.float16  # Half precision pour économiser VRAM
+                    "device": 0,  # Utiliser explicitement GPU 0
+                    "torch_dtype": torch.float16,  # Half precision
+                    "model_kwargs": {
+                        "attn_implementation": "flash_attention_2",  # Attention optimisée
+                        "use_cache": True,  # Cache pour accélération
+                        "pad_token_id": 2,  # EOS token par défaut
+                    }
                 })
-                logging.info("🚀 Configuration GPU activée pour Chocolatine")
+                logging.info("🚀 Configuration GPU haute performance pour Chocolatine")
             else:
-                pipeline_kwargs["device"] = "cpu"
-                pipeline_kwargs["torch_dtype"] = torch.float32
+                pipeline_kwargs.update({
+                    "device": "cpu",
+                    "torch_dtype": torch.float32,
+                    "model_kwargs": {"use_cache": True}
+                })
                 logging.info("💻 Configuration CPU pour Chocolatine")
             
             Chocolatine_pipeline = pipeline(**pipeline_kwargs)
@@ -189,46 +204,52 @@ def extract_and_prepare_audio(file_path: str, temp_manager: TempFileManager) -> 
 # ==================== FONCTION CHOCOLATINE ====================
 
 def run_chocolatine(prompt: str) -> str:
-    """Fonction pour utiliser le modèle Chocolatine via Transformers"""
+    """Fonction optimisée pour utiliser le modèle Chocolatine via Transformers"""
     global Chocolatine_pipeline
     
     if Chocolatine_pipeline is None:
         return "Le modèle Chocolatine n'est pas disponible. Vérifiez les logs de démarrage."
     
     try:
-        # Format des messages pour Chocolatine
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
+        # Optimisation: limiter la longueur du prompt pour accélération
+        if len(prompt) > 2000:
+            prompt = prompt[:1800] + "... [texte tronqué pour optimisation]"
+            
+        logging.info(f"🍫 Chocolatine génération démarrée (prompt: {len(prompt)} chars)")
+        start_time = time.time()
         
-        # Génération de la réponse
+        # Génération optimisée pour la vitesse
         response = Chocolatine_pipeline(
-            messages,
-            max_new_tokens=512,
-            temperature=0.7,
+            prompt,  # Utiliser directement le prompt string
+            max_new_tokens=150,  # Réduire pour accélérer
+            temperature=0.3,     # Moins de randomness = plus rapide
             do_sample=True,
-            pad_token_id=Chocolatine_pipeline.tokenizer.eos_token_id
+            top_p=0.9,          # Nucleus sampling pour qualité
+            repetition_penalty=1.1,  # Éviter les répétitions
+            pad_token_id=Chocolatine_pipeline.tokenizer.eos_token_id,
+            eos_token_id=Chocolatine_pipeline.tokenizer.eos_token_id,
+            return_full_text=False,  # Ne retourner que le texte généré
+            clean_up_tokenization_spaces=True
         )
         
-        # Extraction du texte généré
+        # Extraction optimisée du texte généré
+        elapsed_time = time.time() - start_time
+        
         if response and len(response) > 0:
             generated_text = response[0]['generated_text']
-            # Récupérer seulement la réponse de l'assistant (après le prompt utilisateur)
-            if isinstance(generated_text, list) and len(generated_text) > 1:
-                return generated_text[-1]['content']
-            elif isinstance(generated_text, str):
-                # Si c'est une chaîne, extraire la partie après le prompt
-                user_prompt = f"user: {prompt}"
-                if user_prompt in generated_text:
-                    return generated_text.split(user_prompt)[-1].strip()
-                return generated_text
-            else:
-                return str(generated_text)
+            word_count = len(generated_text.split())
+            tokens_per_sec = word_count / elapsed_time if elapsed_time > 0 else 0
+            
+            logging.info(f"✅ Chocolatine terminé: {elapsed_time:.2f}s, {word_count} mots, {tokens_per_sec:.1f} tok/s")
+            # Avec return_full_text=False, on a directement la réponse
+            return generated_text.strip()
         else:
+            logging.warning(f"⚠️ Chocolatine aucune réponse en {elapsed_time:.2f}s")
             return "Aucune réponse générée par Chocolatine."
             
     except Exception as e:
-        logging.error(f"Erreur avec Chocolatine: {e}")
+        elapsed_time = time.time() - start_time if 'start_time' in locals() else 0
+        logging.error(f"❌ Erreur Chocolatine après {elapsed_time:.2f}s: {e}")
         return f"Erreur lors de la génération: {str(e)}"
 
 # ==================== MODE 1 : API SIMPLE ====================
@@ -569,14 +590,25 @@ def update_settings(settings: Settings):
     description="Vérifie l'état des modèles et du système"
 )
 def health_check():
+    models_status = {
+        "whisper": Transcriber_Whisper is not None,
+        "whisper_light": Transcriber_Whisper_Light is not None,
+        "diarization": diarization_model is not None,
+        "chocolatine": Chocolatine_pipeline is not None
+    }
+    
+    # Déterminer le statut global
+    critical_models = ["whisper", "diarization"]  # Modèles critiques pour le fonctionnement
+    all_critical_loaded = all(models_status[model] for model in critical_models)
+    
     return {
-        "status": "healthy",
-        "models_loaded": {
-            "whisper": Transcriber_Whisper is not None,
-            "diarization": diarization_model is not None
-        },
+        "status": "ready" if all_critical_loaded else "loading",
+        "models_loaded": models_status,
+        "critical_models_ready": all_critical_loaded,
         "cuda_available": torch.cuda.is_available(),
-        "settings": current_settings
+        "gpu_info": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "settings": current_settings,
+        "message": "Tous les modèles critiques sont chargés" if all_critical_loaded else "Chargement en cours..."
     }
 
 # ==================== CHATBOT ====================

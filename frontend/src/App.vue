@@ -772,12 +772,24 @@ export default {
   methods: {
     async initializeModels() {
       try {
-        // Appeler l'endpoint /initialize/ pour charger les modèles au backend
-        const response = await axios.get("/initialize/");
-        console.log(response.data.message);
-        this.initializedModels = true; // Marquer comme initialisé une fois les modèles prêts
+        // Vérifier l'état des modèles via l'endpoint /health/
+        const response = await axios.get("/health/");
+        console.log("État des modèles:", response.data);
+        
+        // Vérifier si tous les modèles critiques sont chargés
+        const modelsLoaded = response.data.models_loaded;
+        if (modelsLoaded.whisper && modelsLoaded.diarization) {
+          this.initializedModels = true;
+          console.log("✅ Tous les modèles sont initialisés");
+        } else {
+          console.warn("⚠️ Certains modèles ne sont pas encore chargés:", modelsLoaded);
+          // Réessayer après un délai
+          setTimeout(() => this.initializeModels(), 2000);
+        }
       } catch (error) {
         console.error("Erreur lors de l'initialisation des modèles :", error);
+        // Réessayer après un délai en cas d'erreur
+        setTimeout(() => this.initializeModels(), 3000);
       }
     },
 

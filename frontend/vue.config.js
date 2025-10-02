@@ -1,5 +1,5 @@
 const { defineConfig } = require('@vue/cli-service')
-const HtmlWebpackPlugin = require('html-webpack-plugin'); // Importer HtmlWebpackPlugin
+const { DefinePlugin } = require('webpack');
 
 module.exports = defineConfig({
   transpileDependencies: true,
@@ -16,6 +16,16 @@ module.exports = defineConfig({
       entry: 'src/main.js',  // Point d'entrée de l'application
       title: 'TranscriMate'  // Nouveau titre pour l'onglet du navigateur
     }
+  },
+  configureWebpack: {
+    plugins: [
+      new DefinePlugin({
+        // Définir les feature flags Vue.js pour supprimer les warnings
+        __VUE_OPTIONS_API__: JSON.stringify(true),
+        __VUE_PROD_DEVTOOLS__: JSON.stringify(false),
+        __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: JSON.stringify(false)
+      })
+    ]
   }
 });
  
