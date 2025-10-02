@@ -1601,7 +1601,7 @@ export default {
       }
 
       try {
-        const audio = new Audio(audioUrl);
+        const audio = new Audio(fullAudioUrl);
         this.currentAudio = audio;
         this.currentSegmentIndex = segmentIndex;
 
@@ -1670,16 +1670,6 @@ export default {
           this.thumbnail = null; // Réinitialise le thumbnail s'il ne s'agit pas d'une vidéo
         }
 
-        this.setupAudio();  // Préparer l'audio
-        this.uploadFile();  // Envoyer le fichier au backend et récupérer la transcription
-      }
-    },
-
-    // Gère le fichier déposé via drag & drop
-    handleDrop(event) {
-      const files = event.dataTransfer.files;
-      if (files.length) {
-        this.file = files[0];  // Stocke le fichier déposé
         this.setupAudio();  // Préparer l'audio
         this.uploadFile();  // Envoyer le fichier au backend et récupérer la transcription
       }
