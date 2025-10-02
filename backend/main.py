@@ -128,23 +128,17 @@ async def load_core_models():
                 "token": hf_token
             }
             
-            # Configuration GPU optimisée pour performance maximale
+            # Configuration GPU optimisée (version compatible)
             if torch.cuda.is_available():
                 pipeline_kwargs.update({
-                    "device": 0,  # Utiliser explicitement GPU 0
-                    "torch_dtype": torch.float16,  # Half precision
-                    "model_kwargs": {
-                        "attn_implementation": "flash_attention_2",  # Attention optimisée
-                        "use_cache": True,  # Cache pour accélération
-                        "pad_token_id": 2,  # EOS token par défaut
-                    }
+                    "device_map": "auto",  # Distribution automatique
+                    "torch_dtype": torch.float16  # Half precision
                 })
-                logging.info("🚀 Configuration GPU haute performance pour Chocolatine")
+                logging.info("🚀 Configuration GPU pour Chocolatine")
             else:
                 pipeline_kwargs.update({
                     "device": "cpu",
-                    "torch_dtype": torch.float32,
-                    "model_kwargs": {"use_cache": True}
+                    "torch_dtype": torch.float32
                 })
                 logging.info("💻 Configuration CPU pour Chocolatine")
             

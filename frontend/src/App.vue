@@ -743,7 +743,11 @@ export default {
   },
 
   async created() {
-    // Appeler /initialize/ avant que l'application ne soit affichée complètement
+    // Configurer l'URL de base pour axios
+    const apiUrl = process.env.VUE_APP_API_URL || 'http://localhost:8000';
+    axios.defaults.baseURL = apiUrl;
+    
+    // Appeler /health/ avant que l'application ne soit affichée complètement
     await this.initializeModels();
 
     // Event listeners keep-alive supprimés - non nécessaires
