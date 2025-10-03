@@ -9,12 +9,12 @@
             <span class="tab-title">🔄 Mode Streaming</span>
             <span class="tab-subtitle">Upload + Affichage Progressif</span>
           </button>
-
+<!--
           <button @click="activeTab = 'live'" :class="['tab-button', { active: activeTab === 'live' }]">
             <span class="tab-title">🎤 Mode Live</span>
             <span class="tab-subtitle">Microphone Temps Réel</span>
           </button>
-          <!--
+
           <button @click="activeTab = 'chatbot'" :class="['tab-button', { active: activeTab === 'chatbot' }]">
             <span class="tab-title">🤖 AKABot</span>
             <span class="tab-subtitle">IA Assistant</span>
@@ -24,7 +24,7 @@
             <span class="tab-title">� API Simple</span>
             <span class="tab-subtitle">Swagger/Développeurs</span>
           </button>
-        -->
+-->
         </div>
 
         <div class="tab-content">
