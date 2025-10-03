@@ -14,7 +14,7 @@
             <span class="tab-title">🎤 Mode Live</span>
             <span class="tab-subtitle">Microphone Temps Réel</span>
           </button>
-
+          <!--
           <button @click="activeTab = 'chatbot'" :class="['tab-button', { active: activeTab === 'chatbot' }]">
             <span class="tab-title">🤖 AKABot</span>
             <span class="tab-subtitle">IA Assistant</span>
@@ -24,7 +24,7 @@
             <span class="tab-title">� API Simple</span>
             <span class="tab-subtitle">Swagger/Développeurs</span>
           </button>
-
+        -->
         </div>
 
         <div class="tab-content">
@@ -124,7 +124,8 @@
                     :style="{ backgroundColor: getSpeakerColor(segment.speaker) }">
                     <div class="message-header">
                       <span v-if="!segment.isEditing" class="speaker"
-                        @click="isTranscriptionComplete ? toggleSpeakerAudio(segment, index) : null"
+                        @click="isTranscriptionComplete && segment.audio_url ? toggleSpeakerAudio(segment, index) : null"
+                        :class="{ 'no-audio': !segment.audio_url }"
                         @contextmenu.prevent="isTranscriptionComplete ? enableEditMode(segment) : null"
                         @touchstart.prevent="handleTouchStart($event, segment)"
                         @touchend.prevent="handleTouchEnd($event)">
@@ -559,6 +560,55 @@
             <div v-if="isProcessing" class="processing-status">
               <div class="loading-spinner"></div>
               <p>Traitement en cours... Veuillez patienter.</p>
+              
+              <!-- Pseudo-progression animée -->
+              <div class="diarization-progress-container">
+                <h4>🎯 Progression de la diarisation</h4>
+                
+                <!-- Segmentation -->
+                <div class="progress-stage">
+                  <div class="progress-label">
+                    <span>📊 Segmentation audio</span>
+                    <span class="progress-status">En cours...</span>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill animated-fill stage-1"></div>
+                  </div>
+                </div>
+                
+                <!-- Speaker Counting -->
+                <div class="progress-stage">
+                  <div class="progress-label">
+                    <span>👥 Identification locuteurs</span>
+                    <span class="progress-status">En attente...</span>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill animated-fill stage-2"></div>
+                  </div>
+                </div>
+                
+                <!-- Embeddings -->
+                <div class="progress-stage">
+                  <div class="progress-label">
+                    <span>🧠 Génération embeddings</span>
+                    <span class="progress-status">En attente...</span>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill animated-fill stage-3"></div>
+                  </div>
+                </div>
+                
+                <!-- Transcription -->
+                <div class="progress-stage">
+                  <div class="progress-label">
+                    <span>🎤 Transcription finale</span>
+                    <span class="progress-status">En attente...</span>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill animated-fill stage-4"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Résultats -->
@@ -714,6 +764,15 @@ export default {
       speakerColors: {}, // Associera chaque locuteur à une couleur unique
       isDarkMode: false, // Contrôle du mode sombre
       transcribedTime: 0,  // Temps total déjà transcrit en secondes
+      
+      // WebSocket progression
+      progressSocket: null,
+      diarizationProgress: {
+        segmentation: { progress: 0, duration: 0 },
+        speaker_counting: { progress: 0, duration: 0 },
+        embeddings: { progress: 0, duration: 0 }
+      },
+      isShowingProgress: false,
       transcriptionProgress: 0,  // Progression globale en pourcentage
       playingIndex: null,  // Index du speaker en train d'être lu
       showSettings: false, // Affiche ou non les paramètres
@@ -746,6 +805,19 @@ export default {
     // Configurer l'URL de base pour axios
     const apiUrl = process.env.VUE_APP_API_URL || 'http://localhost:8000';
     axios.defaults.baseURL = apiUrl;
+    
+    // Gestionnaire d'erreurs global pour éviter les crashes
+    window.addEventListener('error', (event) => {
+      console.error('🚨 Erreur globale interceptée:', event.error);
+      // Ne pas laisser l'application crasher
+      event.preventDefault();
+    });
+    
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('🚨 Promise rejetée non gérée:', event.reason);
+      // Ne pas laisser l'application crasher
+      event.preventDefault();
+    });
     
     // Appeler /health/ avant que l'application ne soit affichée complètement
     await this.initializeModels();
@@ -794,6 +866,62 @@ export default {
         console.error("Erreur lors de l'initialisation des modèles :", error);
         // Réessayer après un délai en cas d'erreur
         setTimeout(() => this.initializeModels(), 3000);
+      }
+    },
+
+    // ==================== WEBSOCKET PROGRESSION ====================
+    
+    connectProgressWebSocket() {
+      const wsUrl = (process.env.VUE_APP_API_URL || 'http://localhost:8000').replace('http', 'ws');
+      console.log("🔄 Tentative connexion WebSocket:", `${wsUrl}/progress/`);
+      this.progressSocket = new WebSocket(`${wsUrl}/progress/`);
+      
+      this.progressSocket.onopen = () => {
+        console.log("🔗 WebSocket progression connecté");
+      };
+      
+      this.progressSocket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'progress') {
+          this.updateDiarizationProgress(data.stage, data.progress, data.duration);
+        }
+      };
+      
+      this.progressSocket.onerror = (error) => {
+        console.error("❌ Erreur WebSocket progression:", error);
+      };
+      
+      this.progressSocket.onclose = () => {
+        console.log("🔌 WebSocket progression fermé");
+        this.progressSocket = null;
+      };
+    },
+    
+    updateDiarizationProgress(stage, progress, duration) {
+      console.log(`📊 Progression ${stage}: ${Math.round(progress)}% (${duration}s)`);
+      console.log(`🔍 isShowingProgress avant:`, this.isShowingProgress);
+      
+      if (this.diarizationProgress[stage]) {
+        this.diarizationProgress[stage].progress = Math.round(progress);
+        this.diarizationProgress[stage].duration = Math.round(duration);
+        
+        // Afficher la progression si on reçoit des données
+        if (progress > 0) {
+          this.isShowingProgress = true;
+          console.log(`✅ isShowingProgress activé pour ${stage}`);
+        }
+        
+        // Masquer quand toutes les étapes sont terminées
+        const allCompleted = Object.values(this.diarizationProgress)
+          .every(stage => stage.progress >= 100);
+        if (allCompleted) {
+          setTimeout(() => {
+            this.isShowingProgress = false;
+            console.log(`🏁 Progression masquée - toutes étapes terminées`);
+          }, 2000);
+        }
+      } else {
+        console.warn(`⚠️ Stage inconnu: ${stage}`);
       }
     },
 
@@ -1180,15 +1308,24 @@ export default {
 
     // Capture un thumbnail de la vidéo sélectionnée
     generateThumbnail(file) {
-      // Vérification de l'existence de l'élément vidéo
+      // Vérification de l'existence de l'élément vidéo (seulement en mode streaming)
+      if (this.activeTab !== 'streaming') {
+        console.log("📹 Thumbnail ignoré - pas en mode streaming");
+        return;
+      }
+      
       const videoElement = this.$refs.video;
       if (!videoElement) {
-        console.error("L'élément vidéo n'est pas disponible");
+        console.warn("⚠️ Élément vidéo non disponible pour thumbnail");
         return;
       }
 
-      videoElement.src = URL.createObjectURL(file); // Charger la vidéo
-      videoElement.load(); // Assurez-vous que la vidéo est chargée
+      try {
+        videoElement.src = URL.createObjectURL(file);
+        videoElement.load();
+      } catch (error) {
+        console.error("Erreur génération thumbnail:", error);
+      }
     },
 
     // Capture le thumbnail quand les données de la vidéo sont prêtes
@@ -1752,7 +1889,7 @@ export default {
     async uploadFile() {
       // Réinitialiser toutes les variables liées à la transcription
       this.transcriptions = [];
-      this.fullTranscription = '';
+      // fullTranscription est calculée automatiquement, pas besoin de la réinitialiser
       this.currentAudio = null;
       this.currentChunkIndex = null;
       this.speechStats = {};
@@ -1823,6 +1960,29 @@ export default {
                       end_time: segment.end_time,
                       audio_url: null // Pas d'URL audio en mode streaming pour l'instant
                     });
+                  } else if (data.status === 'audio_urls_ready' && data.audio_info) {
+                    // Mettre à jour les segments avec les URLs audio
+                    const audioInfo = data.audio_info;
+                    
+                    // Parcourir tous les segments et ajouter les URLs audio
+                    audioInfo.segments_audio_info.forEach(segmentInfo => {
+                      // Trouver le segment correspondant dans les transcriptions
+                      const matchingSegment = this.transcriptions.find(t => 
+                        t.speaker === segmentInfo.speaker && 
+                        Math.abs(t.start_time - segmentInfo.start_time) < 0.1 && 
+                        Math.abs(t.end_time - segmentInfo.end_time) < 0.1
+                      );
+                      
+                      if (matchingSegment) {
+                        matchingSegment.audio_url = segmentInfo.audio_url;
+                        matchingSegment.segment_start = segmentInfo.start_time;
+                        matchingSegment.segment_end = segmentInfo.end_time;
+                      }
+                    });
+                    
+                    this.progressMessage = "URLs audio générées !";
+                    console.log("URLs audio mises à jour pour", audioInfo.segments_audio_info.length, "segments");
+                    
                   } else if (data.status === 'completed') {
                     this.transcriptionProgress = 100;
                     this.progressMessage = "Transcription terminée !";
@@ -1906,32 +2066,52 @@ export default {
     async uploadFileSimple() {
       this.isProcessing = true;
       this.transcriptionResult = null;
+      
+      // Connecter WebSocket pour progression
+      console.log("🚀 Démarrage connexion WebSocket progression...");
+      this.connectProgressWebSocket();
+      
+      // Réinitialiser la progression
+      this.isShowingProgress = false;
+      Object.keys(this.diarizationProgress).forEach(stage => {
+        this.diarizationProgress[stage] = { progress: 0, duration: 0 };
+      });
 
       const formData = new FormData();
       formData.append('file', this.file);
 
       try {
-        console.log('Envoi vers /transcribe_simple/');
-        const response = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_simple/`, {
-          method: 'POST',
-          body: formData
+        console.log('🚀 Envoi vers /transcribe_simple/');
+        
+        const response = await axios.post('/transcribe_simple/', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
         });
 
-        if (!response.ok) {
-          throw new Error(`Erreur HTTP: ${response.status}`);
+        console.log('📡 Réponse HTTP:', response.status, response.statusText);
+        const result = response.data;
+        console.log('✅ Réponse JSON reçue:', result);
+        
+        // Vérifier la structure de la réponse
+        if (!result || !result.transcriptions) {
+          console.error('❌ Structure de réponse invalide:', result);
+          throw new Error('Réponse du serveur invalide - pas de transcriptions');
         }
 
-        const result = await response.json();
-        console.log('Réponse reçue:', result);
+        console.log('🔍 Nombre de segments:', result.transcriptions.length);
         
         // Adaptation pour le mode simple
         const adaptedResult = {
           audio_url: result.full_audio_url,
-          chunks: result.transcriptions.map(item => ({
-            text: item.text,
-            timestamp: [item.start_time, item.end_time],
-            speaker: item.speaker
-          })),
+          chunks: result.transcriptions.map((item, index) => {
+            console.log(`🎵 Segment ${index + 1}:`, item.speaker, item.text.substring(0, 50));
+            return {
+              text: item.text,
+              timestamp: [item.start_time, item.end_time],
+              speaker: item.speaker
+            };
+          }),
           statistics: {
             total_duration: result.transcriptions.length > 0 ? 
               result.transcriptions[result.transcriptions.length - 1].end_time : 0,
@@ -1940,20 +2120,43 @@ export default {
           }
         };
         
+        console.log('🎯 Résultat adapté:', adaptedResult);
         this.transcriptionResult = adaptedResult;
         
         // Validation des URLs audio
         if (adaptedResult.audio_url) {
-          console.log('URL audio disponible:', adaptedResult.audio_url);
+          console.log('✅ URL audio disponible:', adaptedResult.audio_url);
         } else {
-          console.warn('Aucune URL audio dans la réponse');
+          console.warn('⚠️ Aucune URL audio dans la réponse');
         }
 
       } catch (error) {
-        console.error('Erreur lors du traitement:', error);
-        alert('Erreur lors du traitement du fichier: ' + error.message);
+        console.error('💥 Erreur lors du traitement:', error);
+        console.error('📋 Stack trace:', error.stack);
+        
+        // Afficher une erreur plus informative
+        let errorMessage = 'Erreur lors du traitement du fichier';
+        if (error.message.includes('HTTP')) {
+          errorMessage += ' - Erreur serveur: ' + error.message;
+        } else if (error.message.includes('JSON')) {
+          errorMessage += ' - Réponse invalide du serveur';
+        } else {
+          errorMessage += ': ' + error.message;
+        }
+        
+        alert(errorMessage);
+        
+        // Réinitialiser l'état en cas d'erreur
+        this.transcriptionResult = null;
+        
       } finally {
+        console.log('🏁 Traitement terminé');
         this.isProcessing = false;
+        
+        // Fermer le WebSocket de progression
+        if (this.progressSocket) {
+          this.progressSocket.close();
+        }
       }
     }
   }
@@ -2180,6 +2383,25 @@ button:hover {
 .speaker:hover {
   background-color: rgb(0, 255, 76);
   /* Surlignage à la manière d'un stabilo lorsqu'actif */
+}
+
+.speaker.no-audio {
+  cursor: not-allowed;
+  opacity: 0.6;
+  position: relative;
+}
+
+.speaker.no-audio:hover {
+  background-color: transparent !important;
+}
+
+.speaker.no-audio:after {
+  content: "🔇";
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
 }
 
 /* Ajouter l'emoji ▶️ lors du survol */
@@ -3489,6 +3711,145 @@ pre {
 .dark .chunk-header {
   background: #475569;
   border-color: #64748b;
+}
+
+/* Styles pour les barres de progression diarisation */
+.diarization-progress-container {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.diarization-progress-container h4 {
+  margin-bottom: 15px;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.progress-stage {
+  margin-bottom: 12px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.progress-status {
+  font-weight: 600;
+  color: #059669;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  position: relative;
+}
+
+/* Animation séquentielle des barres */
+.animated-fill {
+  width: 0%;
+  background: linear-gradient(90deg, #10b981, #059669, #047857);
+  animation: fillProgressively 12s ease-in-out infinite;
+}
+
+.stage-1 {
+  animation-delay: 0s;
+}
+
+.stage-2 {
+  animation-delay: 3s;
+}
+
+.stage-3 {
+  animation-delay: 6s;
+}
+
+.stage-4 {
+  animation-delay: 9s;
+}
+
+@keyframes fillProgressively {
+  0% { 
+    width: 0%; 
+    background: linear-gradient(90deg, #64748b, #64748b);
+  }
+  8.33% { 
+    width: 100%; 
+    background: linear-gradient(90deg, #10b981, #059669);
+  }
+  25% { 
+    width: 100%; 
+    background: linear-gradient(90deg, #10b981, #059669);
+  }
+  33.33% { 
+    width: 100%; 
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+  }
+  100% { 
+    width: 100%; 
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+  }
+}
+
+/* Effet de pulsation pour la barre active */
+.animated-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+  animation: progressShimmer 1.5s infinite;
+}
+
+@keyframes progressShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Mode sombre pour les barres de progression */
+.dark .diarization-progress-container {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.dark .diarization-progress-container h4 {
+  color: #f1f5f9;
+}
+
+.dark .progress-label {
+  color: #cbd5e1;
+}
+
+.dark .progress-status {
+  color: #34d399;
+}
+
+.dark .progress-bar {
+  background: #374151;
+}
+
+.dark .animated-fill {
+  background: linear-gradient(90deg, #059669, #047857, #065f46);
 }
 
 </style>
