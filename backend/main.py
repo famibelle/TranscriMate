@@ -24,6 +24,7 @@ import filetype
 from moviepy.editor import VideoFileClip
 
 from temp_manager import TempFileManager, async_temp_manager_context
+from session_manager import session_manager
 
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
@@ -321,6 +322,57 @@ def run_chocolatine(prompt: str) -> str:
         logging.error(f"❌ Erreur Chocolatine après {elapsed_time:.2f}s: {e}")
         return f"Erreur lors de la génération: {str(e)}"
 
+# ==================== GESTION DES SESSIONS ====================
+
+@app.post(
+    "/session/create",
+    tags=["🔐 Sessions"],
+    summary="Créer une nouvelle session",
+    description="Crée une nouvelle session pour gérer les fichiers temporaires"
+)
+async def create_session():
+    """Crée une nouvelle session"""
+    session_id = session_manager.create_session()
+    return {"session_id": session_id}
+
+@app.get(
+    "/session/{session_id}/info",
+    tags=["🔐 Sessions"],
+    summary="Informations sur une session",
+    description="Récupère les informations d'une session"
+)
+async def get_session_info(session_id: str):
+    """Récupère les informations d'une session"""
+    try:
+        session_info = session_manager.get_session_info(session_id)
+        return session_info
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.delete(
+    "/session/{session_id}",
+    tags=["🔐 Sessions"],
+    summary="Supprimer une session",
+    description="Supprime une session et tous ses fichiers"
+)
+async def delete_session(session_id: str):
+    """Supprime une session"""
+    try:
+        session_manager.cleanup_session(session_id)
+        return {"message": f"Session {session_id} supprimée"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get(
+    "/sessions/list",
+    tags=["🔐 Sessions"],
+    summary="Lister toutes les sessions",
+    description="Liste toutes les sessions actives"
+)
+async def list_sessions():
+    """Liste toutes les sessions actives"""
+    return session_manager.list_sessions()
+
 # ==================== MODE 1 : API SIMPLE ====================
 
 class Settings(BaseModel):
@@ -422,12 +474,22 @@ async def transcribe_simple(file: UploadFile = File(...)):
     summary="Transcription en streaming",
     description="Traitement progressif avec retour en temps réel (Server-Sent Events)"
 )
-async def transcribe_streaming(file: UploadFile = File(...)):
+async def transcribe_streaming(file: UploadFile = File(...), session_id: str = None):
     """Mode 2 : Streaming - Traitement progressif avec SSE"""
     
     # Vérifier les modèles
     if Transcriber_Whisper is None or diarization_model is None:
         raise HTTPException(status_code=500, detail="Modèles non initialisés")
+    
+    # Créer une session si elle n'est pas fournie
+    if session_id is None:
+        session_id = session_manager.create_session()
+    
+    # Vérifier que la session existe
+    try:
+        session_dir = session_manager.get_session_dir(session_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Session introuvable")
     
     # Lire le fichier avant le générateur pour éviter les problèmes de connexion
     file_data = await file.read()
@@ -536,14 +598,13 @@ async def transcribe_streaming(file: UploadFile = File(...)):
                 full_audio_path = temp_manager.get_temp_path_with_suffix(".wav")
                 audio.export(full_audio_path, format="wav")
                 
-                # Créer le nom de fichier unique pour l'URL
+                # Créer le nom de fichier unique pour l'URL avec l'ID de session
                 import uuid
-                audio_filename = f"streaming_{uuid.uuid4().hex[:8]}.wav"
+                audio_filename = f"streaming_{session_id}_{uuid.uuid4().hex[:8]}.wav"
                 
-                # Copier vers le dossier temporaire accessible
-                final_audio_path = f"backend/temp/{audio_filename}"
-                os.makedirs("backend/temp", exist_ok=True)
-                audio.export(final_audio_path, format="wav")
+                # Enregistrer le fichier dans le répertoire de session
+                session_audio_path = session_manager.add_file_to_session(session_id, audio_filename)
+                audio.export(session_audio_path, format="wav")
                 
                 # Envoyer les informations audio pour chaque segment
                 audio_info = {
@@ -742,18 +803,38 @@ temp_audio_cache = {}
 async def get_temp_audio(filename: str):
     """Retourne un fichier audio temporaire"""
     
-    # Essayer d'abord dans backend/temp (pour les nouveaux fichiers streaming)
-    local_temp_path = f"backend/temp/{filename}"
-    if os.path.exists(local_temp_path):
-        file_path = local_temp_path
-    else:
-        # Construire le chemin du fichier (dans /temp ou votre répertoire temporaire)
-        temp_dir = tempfile.gettempdir()
-        file_path = os.path.join(temp_dir, filename)
-        
-        # Vérifier que le fichier existe
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="Fichier audio non trouvé")
+    file_path = None
+    
+    # D'abord, essayer de trouver le fichier dans les sessions
+    # Le nom de fichier doit contenir l'ID de session : streaming_{session_id}_{uuid}.wav
+    if filename.startswith("streaming_"):
+        parts = filename.split("_")
+        if len(parts) >= 3:
+            # Extraire l'ID de session (le deuxième élément après "streaming")
+            try:
+                session_id = parts[1]
+                session_file_path = session_manager.get_file_path(session_id, filename)
+                if os.path.exists(session_file_path):
+                    file_path = session_file_path
+            except ValueError:
+                pass  # Session introuvable, essayer les autres méthodes
+    
+    # Si pas trouvé dans les sessions, essayer les anciens emplacements
+    if file_path is None:
+        # Essayer d'abord dans backend/temp (compatibilité)
+        local_temp_path = f"backend/temp/{filename}"
+        if os.path.exists(local_temp_path):
+            file_path = local_temp_path
+        else:
+            # Construire le chemin du fichier (dans /temp ou votre répertoire temporaire)
+            temp_dir = tempfile.gettempdir()
+            temp_file_path = os.path.join(temp_dir, filename)
+            if os.path.exists(temp_file_path):
+                file_path = temp_file_path
+    
+    # Vérifier que le fichier a été trouvé
+    if file_path is None or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Fichier audio non trouvé")
     
     # Retourner le fichier
     return FileResponse(

@@ -1897,14 +1897,41 @@ export default {
       this.transcriptionProgress = 0;
       this.progressData = {}; // Stocker le statut de progression
 
+      // Créer une session si nous sommes en mode streaming
+      let sessionId = null;
+      if (this.selectedMode === 'streaming') {
+        try {
+          const sessionResponse = await fetch(`${process.env.VUE_APP_API_URL}/session/create`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json();
+            sessionId = sessionData.session_id;
+            console.log('Session créée:', sessionId);
+          }
+        } catch (error) {
+          console.error('Erreur lors de la création de session:', error);
+        }
+      }
+
       this.startProgressLoop(); // Démarre la boucle de progression
 
       const formData = new FormData();
       formData.append('file', this.file);
 
       try {
+        // Construire l'URL avec le session_id si disponible
+        let streamingUrl = `${process.env.VUE_APP_API_URL}/transcribe_streaming/`;
+        if (sessionId) {
+          streamingUrl += `?session_id=${sessionId}`;
+        }
+        
         // Préparer les données pour l'upload via FormData en POST
-        const uploadResponse = await fetch(`${process.env.VUE_APP_API_URL}/transcribe_streaming/`, {
+        const uploadResponse = await fetch(streamingUrl, {
           method: 'POST',
           body: formData
         });
@@ -1992,6 +2019,13 @@ export default {
                       this.calculateSpeechStats();
                     }
                     
+                    // Programmer le nettoyage de la session après un délai (optionnel)
+                    if (sessionId) {
+                      setTimeout(() => {
+                        this.cleanupSession(sessionId);
+                      }, 30000); // Nettoyer après 30 secondes
+                    }
+                    
                     console.log("Transcription streaming terminée avec succès");
                     break;
                   } else if (data.status === 'error') {
@@ -2039,6 +2073,25 @@ export default {
       const secs = Math.floor(seconds % 60);
       const millisecs = Math.floor((seconds % 1) * 100);
       return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${millisecs.toString().padStart(2, '0')}`;
+    },
+
+    // Gestion des sessions
+    async cleanupSession(sessionId) {
+      if (!sessionId) return;
+      
+      try {
+        const response = await fetch(`${process.env.VUE_APP_API_URL}/session/${sessionId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          console.log('Session nettoyée:', sessionId);
+        } else {
+          console.warn('Impossible de nettoyer la session:', sessionId);
+        }
+      } catch (error) {
+        console.error('Erreur lors du nettoyage de session:', error);
+      }
     },
 
     handleDrop(event) {
