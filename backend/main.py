@@ -23,6 +23,14 @@ from transformers import pipeline
 import filetype
 from moviepy.editor import VideoFileClip
 
+# Import OpenAI pour GPT-4o-mini
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    logging.warning("⚠️ Module 'openai' non installé. GPT-4o-mini ne sera pas disponible.")
+
 from temp_manager import TempFileManager, async_temp_manager_context
 from session_manager import session_manager
 
@@ -914,6 +922,63 @@ class QuestionRequest(BaseModel):
             }
         }
 
+async def run_gpt4o_mini(prompt: str) -> str:
+    """Fonction pour utiliser GPT-4o-mini via l'API OpenAI"""
+    if not OPENAI_AVAILABLE:
+        return "Erreur: Module 'openai' non installé. Installez-le avec 'pip install openai'"
+    
+    try:
+        # Récupérer la clé API depuis les variables d'environnement
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return "Erreur: OPENAI_API_KEY non configurée dans les variables d'environnement"
+        
+        logging.info("🤖 GPT-4o-mini génération démarrée")
+        start_time = time.time()
+        
+        # Créer le client OpenAI
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Faire l'appel à l'API
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "Tu es un assistant IA expert qui analyse des transcriptions audio et répond aux questions des utilisateurs de manière précise, structurée et utile. Tu dois te baser uniquement sur le contenu de la transcription fournie."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            max_tokens=800,  # Augmenté pour des réponses plus complètes
+            temperature=0.3,  # Moins de créativité, plus de précision
+            top_p=0.9,
+            frequency_penalty=0.1,  # Éviter les répétitions
+            presence_penalty=0.1
+        )
+        
+        elapsed_time = time.time() - start_time
+        response_text = response.choices[0].message.content
+        
+        # Statistiques de la réponse
+        word_count = len(response_text.split())
+        tokens_used = response.usage.total_tokens if response.usage else 0
+        
+        logging.info(f"✅ GPT-4o-mini terminé: {elapsed_time:.2f}s, {word_count} mots, {tokens_used} tokens")
+        
+        return response_text.strip()
+        
+    except openai.OpenAIError as e:
+        error_msg = f"Erreur API OpenAI: {str(e)}"
+        logging.error(error_msg)
+        return error_msg
+    except Exception as e:
+        error_msg = f"Erreur lors de l'appel à GPT-4o-mini: {str(e)}"
+        logging.error(error_msg)
+        return error_msg
+
 @app.post(
     "/ask_question/",
     tags=["🤖 Chatbot"],
@@ -924,42 +989,87 @@ async def ask_question(request: QuestionRequest):
     """Endpoint pour le chatbot - Réponse à une question basée sur la transcription"""
     
     try:
-        # Construire le prompt complet
-        prompt = f"""Voici une transcription d'une conversation:
-
+        # Construire le prompt complet avec plus de structure
+        prompt = f"""TRANSCRIPTION À ANALYSER:
 {request.transcription}
 
-Question: {request.question}
+QUESTION POSÉE:
+{request.question}
 
-Réponds à la question en te basant sur le contenu de la transcription. Sois précis et structure ta réponse."""
+INSTRUCTIONS:
+- Analyse attentivement la transcription ci-dessus
+- Réponds à la question en te basant UNIQUEMENT sur le contenu de la transcription
+- Si l'information n'est pas dans la transcription, indique-le clairement
+- Structure ta réponse de manière claire et précise
+- Utilise des exemples de la transcription si pertinent"""
 
         # Utiliser le modèle demandé
         if request.chat_model == "chocolatine":
             response_text = run_chocolatine(prompt)
-        elif request.chat_model == "gpt-4":
-            # Pour GPT-4, on simule pour l'instant (nécessiterait une API key OpenAI)
-            response_text = f"""[Simulation GPT-4] Basé sur la transcription fournie, voici ma réponse à votre question "{request.question}":
-
-La transcription montre une conversation entre deux locuteurs discutant d'une journée d'apprentissage du français. 
-
-Analyse détaillée:
-- SPEAKER_01 semble être un enseignant ou guide
-- SPEAKER_00 est un étudiant partageant son expérience
-- La conversation porte sur des interactions multilingues et des activités quotidiennes
-- L'étudiant a eu une journée productive avec des cours et des rencontres
-
-La conversation révèle un environnement d'apprentissage positif et interactif."""
+        elif request.chat_model == "gpt-4o-mini":
+            response_text = await run_gpt4o_mini(prompt)
         else:
-            response_text = f"Modèle '{request.chat_model}' non supporté. Modèles disponibles: chocolatine, gpt-4"
+            # Liste des modèles supportés
+            supported_models = ["chocolatine", "gpt-4o-mini"]
+            response_text = f"Modèle '{request.chat_model}' non supporté. Modèles disponibles: {', '.join(supported_models)}"
 
         return {
             "response": response_text,
             "model_used": request.chat_model,
-            "status": "success"
+            "status": "success",
+            "question": request.question,
+            "transcription_length": len(request.transcription),
+            "openai_available": OPENAI_AVAILABLE
         }
         
     except Exception as e:
+        logging.error(f"Erreur dans ask_question: {e}")
         raise HTTPException(status_code=500, detail=f"Erreur lors du traitement: {str(e)}")
+
+@app.get(
+    "/chatbot/models",
+    tags=["🤖 Chatbot"],
+    summary="Liste des modèles disponibles",
+    description="Retourne la liste des modèles de chat disponibles"
+)
+async def get_available_chat_models():
+    """Liste les modèles de chat disponibles"""
+    models = []
+    
+    # Vérifier Chocolatine
+    if Chocolatine_pipeline is not None:
+        models.append({
+            "id": "chocolatine",
+            "name": "Chocolatine-3B-Instruct",
+            "description": "Modèle français local optimisé",
+            "type": "local",
+            "available": True
+        })
+    else:
+        models.append({
+            "id": "chocolatine",
+            "name": "Chocolatine-3B-Instruct",
+            "description": "Modèle français local (non chargé)",
+            "type": "local",
+            "available": False
+        })
+    
+    # Vérifier GPT-4o-mini
+    openai_key_available = bool(os.getenv("OPENAI_API_KEY"))
+    models.append({
+        "id": "gpt-4o-mini",
+        "name": "GPT-4o-mini",
+        "description": "Modèle OpenAI haute performance",
+        "type": "api",
+        "available": OPENAI_AVAILABLE and openai_key_available,
+        "requires_api_key": True,
+        "api_key_configured": openai_key_available
+    })
+    
+    return {
+        "models": models,
+        "default_model": "chocolatine" if Chocolatine_pipeline is not None else "gpt-4o-mini"
+    }
 
 if __name__ == "__main__":
     import uvicorn
