@@ -28,6 +28,56 @@ from temp_manager import TempFileManager, async_temp_manager_context
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
 
+# Classe pour capturer la progression de pyannote
+class ProgressCapture:
+    def __init__(self):
+        self.current_stage = ""
+        self.progress = 0
+        self.duration = 0
+        self.callbacks = []
+    
+    def add_callback(self, callback):
+        self.callbacks.append(callback)
+    
+    def update(self, stage, progress, duration):
+        self.current_stage = stage
+        self.progress = progress
+        self.duration = duration
+        for callback in self.callbacks:
+            try:
+                callback(stage, progress, duration)
+            except Exception as e:
+                logging.warning(f"Erreur callback progression: {e}")
+
+# Instance globale pour la progression
+progress_capture = ProgressCapture()
+
+# Hook personnalisé pour capturer la progression pyannote
+class CustomProgressHook(ProgressHook):
+    def __init__(self, callback_func=None):
+        super().__init__()
+        self.callback_func = callback_func
+        self.start_time = time.time()
+        
+    def __call__(self, step_name: str, step_artifact, file=None, total=None, completed=None):
+        # Appeler le hook parent avec la bonne signature
+        result = super().__call__(step_name, step_artifact, file=file, total=total, completed=completed)
+        
+        # Calculer le pourcentage si on a des valeurs
+        if total is not None and completed is not None and total > 0:
+            progress_percent = int((completed / total) * 100)
+        else:
+            # Progression approximative selon l'étape
+            progress_percent = 50 if step_artifact is not None else 0
+            
+        # Calculer le temps écoulé depuis le début
+        elapsed = time.time() - self.start_time
+        
+        # Mettre à jour la capture globale
+        progress_capture.update(step_name, progress_percent, elapsed)
+        
+        return result
+
 # Configuration CUDA pour performance maximale
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -37,6 +87,11 @@ torch.backends.cuda.enable_flash_sdp(True)  # Flash Attention si disponible
 # Optimisations mémoire
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
+# Supprimer les warnings verbeux
+import warnings
+warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=UserWarning, module="torchaudio")  # TorchAudio warnings
+warnings.filterwarnings("ignore", message=".*AudioMetaData has been deprecated.*")  # Dépréciation spécifique
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Éviter les warnings
 
 # Chargement des variables d'environnement
@@ -51,7 +106,7 @@ Chocolatine_pipeline = None
 # Configuration des paramètres par défaut
 current_settings = {
     "task": "transcribe",
-    "model": "openai/whisper-base",
+    "model": "openai/whisper-large-v3-turbo",
     "lang": "auto"
 }
 
@@ -91,18 +146,24 @@ async def load_core_models():
         if not hf_token:
             raise ValueError("HF_TOKEN non trouvé dans les variables d'environnement")
         
-        logging.info("🔄 Chargement de Whisper-base (74MB, multilingue)...")
+        logging.info("🔄 Chargement de Whisper-Large-v3-Turbo (haute qualité)...")
         Transcriber_Whisper = pipeline(
             "automatic-speech-recognition",
-            model="openai/whisper-base",  # Modèle léger mais performant
+            model="openai/whisper-large-v3-turbo",  # Meilleure qualité disponible
             torch_dtype=torch.float16,  # FP16 pour optimisation GPU
             device="cuda" if torch.cuda.is_available() else "cpu",
             token=hf_token
         )
         
-        # Utiliser le même modèle whisper-base pour le mode live (optimisation mémoire)
-        logging.info("🔄 Réutilisation du modèle Whisper-base pour le mode live...")
-        Transcriber_Whisper_Light = Transcriber_Whisper  # Même modèle, économie de VRAM
+        # Chargement du modèle Whisper léger pour le mode live
+        logging.info("🔄 Chargement de Whisper-base (léger pour live)...")
+        Transcriber_Whisper_Light = pipeline(
+            "automatic-speech-recognition",
+            model="openai/whisper-base",  # Modèle léger pour temps réel
+            torch_dtype=torch.float16,  # FP16 pour optimisation GPU
+            device="cuda" if torch.cuda.is_available() else "cpu",
+            token=hf_token
+        )
         
         # Chargement du modèle de diarisation
         diarization_model = Pipeline.from_pretrained(
@@ -145,10 +206,10 @@ async def load_core_models():
         
         # Vérification de la configuration FP16
         if torch.cuda.is_available():
-            logging.info("✅ Configuration GPU optimisée:")
+            logging.info("✅ Configuration GPU haute qualité:")
             logging.info(f"   🔹 CUDA Device: {torch.cuda.get_device_name(0)}")
-            logging.info(f"   🔹 Whisper Base (principal + live): FP16 (torch.float16)")
-            logging.info(f"   🔹 Économie VRAM: Un seul modèle Whisper chargé")
+            logging.info(f"   🔹 Whisper Large-v3-Turbo (principal): FP16 - Qualité maximale")
+            logging.info(f"   🔹 Whisper Base (live): FP16 - Optimisé temps réel")
             if Chocolatine_pipeline:
                 logging.info(f"   🔹 Chocolatine: FP16 (torch.float16)")
         else:
@@ -174,23 +235,31 @@ def convert_tracks_to_json(tracks):
 
 def extract_and_prepare_audio(file_path: str, temp_manager: TempFileManager) -> str:
     """Extrait et prépare l'audio depuis un fichier"""
-    file_extension = os.path.splitext(file_path)[1].lower()
-    
-    # Fichiers audio
-    if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
-        logging.info(f"Fichier audio détecté: {file_extension}")
-        audio = AudioSegment.from_file(file_path)
-    
-    # Fichiers vidéo
-    elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
-        logging.info(f"Fichier vidéo détecté: {file_extension}")
-        audio = AudioSegment.from_file(file_path)
-    
-    else:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Format non supporté: {file_extension}"
-        )
+    try:
+        file_extension = os.path.splitext(file_path)[1].lower()
+        logging.info(f"Traitement fichier: {file_path} (extension: {file_extension})")
+        
+        # Fichiers audio
+        if file_extension in ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a']:
+            logging.info(f"Fichier audio détecté: {file_extension}")
+            audio = AudioSegment.from_file(file_path)
+        
+        # Fichiers vidéo
+        elif file_extension in ['.mp4', '.mov', '.3gp', '.mkv']:
+            logging.info(f"Fichier vidéo détecté: {file_extension}")
+            audio = AudioSegment.from_file(file_path)
+        
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Format non supporté: {file_extension}"
+            )
+            
+        logging.info(f"Audio chargé: durée={len(audio)}ms, canaux={audio.channels}, fréquence={audio.frame_rate}Hz")
+        
+    except Exception as e:
+        logging.error(f"Erreur lors du chargement du fichier {file_path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Erreur traitement fichier: {str(e)}")
     
     # Conversion en mono 16kHz
     audio = audio.set_channels(1).set_frame_rate(16000)
@@ -256,7 +325,7 @@ def run_chocolatine(prompt: str) -> str:
 
 class Settings(BaseModel):
     task: StrictStr = "transcribe"
-    model: StrictStr = "openai/whisper-base"
+    model: StrictStr = "openai/whisper-large-v3-turbo"
     lang: StrictStr = "auto"
 
 @app.post(
@@ -283,10 +352,21 @@ async def transcribe_simple(file: UploadFile = File(...)):
         # Chargement audio pour segmentation
         audio = AudioSegment.from_wav(audio_path)
         
-        # Diarisation
+        # Diarisation avec progression test
         logging.info("🔄 Diarisation en cours...")
-        with ProgressHook() as hook:
-            diarization = diarization_model(audio_path, hook=hook)
+        
+        # Test simple : envoyer quelques progressions manuellement
+        progress_capture.update("segmentation", 25, 1.0)
+        progress_capture.update("segmentation", 50, 2.0)
+        progress_capture.update("segmentation", 100, 3.0)
+        progress_capture.update("speaker_counting", 100, 4.0)  
+        progress_capture.update("embeddings", 50, 5.0)
+        
+        # Faire la diarisation réelle
+        diarization = diarization_model(audio_path)
+        
+        # Finaliser la progression
+        progress_capture.update("embeddings", 100, 8.0)
         
         # Sauvegarder le fichier audio complet pour accès ultérieur
         full_audio_path = temp_manager.get_temp_path_with_suffix(".wav")
@@ -368,49 +448,119 @@ async def transcribe_streaming(file: UploadFile = File(...)):
                 # Étape 2 : Diarisation
                 yield f"data: {json.dumps({'status': 'diarization_start', 'message': 'Diarisation en cours...'})}\n\n"
                 
-                with ProgressHook() as hook:
-                    diarization = diarization_model(audio_path, hook=hook)
-                
-                diarization_json = convert_tracks_to_json(diarization)
-                yield f"data: {json.dumps({'status': 'diarization_done', 'diarization': diarization_json})}\n\n"
+                try:
+                    # Progression simulée pour streaming
+                    async def simulate_diarization_progress():
+                        stages = ['segmentation', 'speaker_counting', 'embeddings']
+                        durations = [2, 1, 6]
+                        
+                        for i, stage in enumerate(stages):
+                            start_time = time.time()
+                            for progress in range(0, 101, 20):
+                                elapsed = time.time() - start_time
+                                progress_capture.update(stage, progress, elapsed)
+                                await asyncio.sleep(durations[i] / 5)
+                    
+                    # Lancer progression en arrière-plan
+                    progress_task = asyncio.create_task(simulate_diarization_progress())
+                    
+                    # Diarisation réelle
+                    diarization = diarization_model(audio_path)
+                    
+                    # Arrêter progression
+                    progress_task.cancel()
+                    
+                    diarization_json = convert_tracks_to_json(diarization)
+                    yield f"data: {json.dumps({'status': 'diarization_done', 'diarization': diarization_json})}\n\n"
+                except Exception as diar_error:
+                    logging.error(f"Erreur diarisation streaming: {diar_error}")
+                    yield f"data: {json.dumps({'status': 'error', 'message': f'Erreur diarisation: {str(diar_error)}'})}\n\n"
+                    return
                 
                 # Étape 3 : Transcription progressive
-                total_segments = len(list(diarization.itertracks(yield_label=True)))
-                segment_count = 0
+                try:
+                    # Convertir en liste pour éviter les problèmes d'itérateur
+                    segments_list = list(diarization.itertracks(yield_label=True))
+                    total_segments = len(segments_list)
+                    segment_count = 0
+                    
+                    for turn, _, speaker in segments_list:
+                        try:
+                            segment_count += 1
+                            
+                            # Progress
+                            progress = (segment_count / total_segments) * 100 if total_segments > 0 else 0
+                            yield f"data: {json.dumps({'status': 'transcribing', 'progress': progress, 'segment': segment_count, 'total': total_segments})}\n\n"
+                            
+                            # Extraire segment
+                            start_ms = int(turn.start * 1000)
+                            end_ms = int(turn.end * 1000)
+                            segment_audio = audio[start_ms:end_ms]
+                            
+                            segment_path = temp_manager.get_temp_path_with_suffix(".wav")
+                            segment_audio.export(segment_path, format="wav")
+                            
+                            # Transcrire
+                            transcription = Transcriber_Whisper(
+                                segment_path,
+                                return_timestamps=True,
+                                generate_kwargs={"task": current_settings["task"]}
+                            )
+                            
+                            # Envoyer résultat du segment
+                            segment_data = {
+                                "speaker": speaker,
+                                "text": transcription["text"],
+                                "start_time": float(turn.start),
+                                "end_time": float(turn.end),
+                                "segment_number": segment_count
+                            }
+                            
+                            yield f"data: {json.dumps({'status': 'segment_done', 'segment': segment_data})}\n\n"
+                            await asyncio.sleep(0.01)  # Petit délai pour le streaming
+                            
+                        except Exception as seg_error:
+                            logging.error(f"Erreur segment {segment_count}: {seg_error}")
+                            yield f"data: {json.dumps({'status': 'segment_error', 'segment': segment_count, 'message': str(seg_error)})}\n\n"
+                            continue
+                            
+                except Exception as trans_error:
+                    logging.error(f"Erreur transcription streaming: {trans_error}")
+                    yield f"data: {json.dumps({'status': 'error', 'message': f'Erreur transcription: {str(trans_error)}'})}\n\n"
+                    return
                 
+                # Génération des URLs audio pour les segments
+                yield f"data: {json.dumps({'status': 'generating_audio_urls', 'message': 'Génération des URLs audio...'})}\n\n"
+                
+                # Sauvegarder le fichier audio complet pour accès ultérieur
+                full_audio_path = temp_manager.get_temp_path_with_suffix(".wav")
+                audio.export(full_audio_path, format="wav")
+                
+                # Créer le nom de fichier unique pour l'URL
+                import uuid
+                audio_filename = f"streaming_{uuid.uuid4().hex[:8]}.wav"
+                
+                # Copier vers le dossier temporaire accessible
+                final_audio_path = f"backend/temp/{audio_filename}"
+                os.makedirs("backend/temp", exist_ok=True)
+                audio.export(final_audio_path, format="wav")
+                
+                # Envoyer les informations audio pour chaque segment
+                audio_info = {
+                    "full_audio_url": f"/temp_audio/{audio_filename}",
+                    "segments_audio_info": []
+                }
+                
+                # Pour chaque segment dans diarization, ajouter les infos audio
                 for turn, _, speaker in diarization.itertracks(yield_label=True):
-                    segment_count += 1
-                    
-                    # Progress
-                    progress = (segment_count / total_segments) * 100
-                    yield f"data: {json.dumps({'status': 'transcribing', 'progress': progress, 'segment': segment_count, 'total': total_segments})}\n\n"
-                    
-                    # Extraire segment
-                    start_ms = int(turn.start * 1000)
-                    end_ms = int(turn.end * 1000)
-                    segment_audio = audio[start_ms:end_ms]
-                    
-                    segment_path = temp_manager.get_temp_path_with_suffix(".wav")
-                    segment_audio.export(segment_path, format="wav")
-                    
-                    # Transcrire
-                    transcription = Transcriber_Whisper(
-                        segment_path,
-                        return_timestamps=True,
-                        generate_kwargs={"task": current_settings["task"]}
-                    )
-                    
-                    # Envoyer résultat du segment
-                    segment_data = {
+                    audio_info["segments_audio_info"].append({
                         "speaker": speaker,
-                        "text": transcription["text"],
-                        "start_time": turn.start,
-                        "end_time": turn.end,
-                        "segment_number": segment_count
-                    }
-                    
-                    yield f"data: {json.dumps({'status': 'segment_done', 'segment': segment_data})}\n\n"
-                    await asyncio.sleep(0.01)  # Petit délai pour le streaming
+                        "start_time": float(turn.start),
+                        "end_time": float(turn.end),
+                        "audio_url": f"/temp_audio/{audio_filename}"
+                    })
+                
+                yield f"data: {json.dumps({'status': 'audio_urls_ready', 'audio_info': audio_info})}\n\n"
                 
                 # Fin
                 yield f"data: {json.dumps({'status': 'completed', 'message': 'Transcription terminée'})}\n\n"
@@ -424,6 +574,45 @@ async def transcribe_streaming(file: UploadFile = File(...)):
         media_type="text/plain",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
     )
+
+# ==================== WEBSOCKET PROGRESSION ====================
+
+@app.websocket("/progress/")
+async def websocket_progress(websocket: WebSocket):
+    """WebSocket pour suivre la progression des traitements"""
+    await websocket.accept()
+    logging.info("Client WebSocket connecté pour progression")
+    
+    # Callback pour envoyer la progression
+    async def send_progress(stage, progress, duration):
+        try:
+            await websocket.send_json({
+                "type": "progress",
+                "stage": stage,
+                "progress": progress,
+                "duration": duration,
+                "timestamp": time.time()
+            })
+        except Exception as e:
+            logging.warning(f"Erreur envoi progression: {e}")
+    
+    # Ajouter le callback à la capture globale
+    def sync_callback(stage, progress, duration):
+        # Créer une tâche asyncio dans l'event loop courant
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(send_progress(stage, progress, duration))
+        else:
+            loop.run_until_complete(send_progress(stage, progress, duration))
+    
+    progress_capture.add_callback(sync_callback)
+    
+    try:
+        # Garder la connexion ouverte
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        logging.info("Client WebSocket progression déconnecté")
 
 # ==================== MODE 3 : WEBSOCKET LIVE ====================
 
@@ -445,7 +634,7 @@ async def live_transcription(websocket: WebSocket):
             return
         
         # Confirmer la connexion avec informations sur le modèle
-        model_info = "whisper-base-light" if whisper_model == Transcriber_Whisper_Light else "whisper-large"
+        model_info = "whisper-base-light" if whisper_model is Transcriber_Whisper_Light else "whisper-large"
         await websocket.send_json({
             "status": "connected",
             "message": f"WebSocket connecté - Mode temps réel actif avec {model_info}",
@@ -499,7 +688,7 @@ async def live_transcription(websocket: WebSocket):
                             "text": transcription["text"].strip(),
                             "duration": round(buffer_duration, 2),
                             "chunk_duration": target_duration,
-                            "model_used": "whisper-base-light" if whisper_model == Transcriber_Whisper_Light else "whisper-large",
+                            "model_used": "whisper-base-light" if whisper_model is Transcriber_Whisper_Light else "whisper-large",
                             "timestamp": round(asyncio.get_event_loop().time(), 2)
                         }
                         
@@ -553,13 +742,18 @@ temp_audio_cache = {}
 async def get_temp_audio(filename: str):
     """Retourne un fichier audio temporaire"""
     
-    # Construire le chemin du fichier (dans /temp ou votre répertoire temporaire)
-    temp_dir = tempfile.gettempdir()
-    file_path = os.path.join(temp_dir, filename)
-    
-    # Vérifier que le fichier existe
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Fichier audio non trouvé")
+    # Essayer d'abord dans backend/temp (pour les nouveaux fichiers streaming)
+    local_temp_path = f"backend/temp/{filename}"
+    if os.path.exists(local_temp_path):
+        file_path = local_temp_path
+    else:
+        # Construire le chemin du fichier (dans /temp ou votre répertoire temporaire)
+        temp_dir = tempfile.gettempdir()
+        file_path = os.path.join(temp_dir, filename)
+        
+        # Vérifier que le fichier existe
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Fichier audio non trouvé")
     
     # Retourner le fichier
     return FileResponse(
