@@ -7,15 +7,15 @@ services:
       - "8000:8000"
     environment:
       - NODE_ENV=production
+    # HF_TOKEN est obligatoire au démarrage du backend, OPENAI_API_KEY est optionnel
+    env_file:
+      - ./backend/.env
     volumes:
       # Volume pour les fichiers uploadés si nécessaire
       - ./backend/uploads:/app/uploads
     restart: unless-stopped
     networks:
       - app-network
-    # Ajouter des variables d'environnement si nécessaire
-    # env_file:
-    #   - .env
 
   frontend:
     build:

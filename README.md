@@ -5,26 +5,40 @@ TranscriMate est une application de transcription audio/vidéo intelligente qui 
 ## 🚀 Fonctionnalités
 
 - **Transcription audio/vidéo** : Conversion automatique de fichiers audio et vidéo en texte
-- **Séparation des locuteurs** : Identification et séparation automatique des différentes voix
-- **Traduction** : Traduction automatique vers l'anglais
-- **Chatbot IA** : Interaction avec les transcriptions via RAG (GPT-4 ou Chocolatine)
-- **Transcription en temps réel** : Enregistrement et transcription live via microphone
+- **Séparation des locuteurs** : Diarisation automatique via pyannote (qui parle, et quand)
+- **Traduction** : Traduction automatique vers l'anglais (mode `translate` de Whisper)
+- **Chatbot IA** : Questions/réponses sur la transcription (Chocolatine en local ou GPT-4o-mini via API)
+- **Transcription en temps réel** : Enregistrement et transcription live via microphone (WebSocket)
 - **Interface moderne** : Interface web responsive avec mode sombre/clair
+
+## 🧠 Modèles utilisés
+
+Les modèles sont **chargés au démarrage du backend** et fixés dans le code (`load_core_models()` dans `backend/main.py`) :
+
+| Rôle | Modèle |
+|------|--------|
+| Transcription de fichiers | `openai/whisper-large-v3-turbo` |
+| Transcription live (micro) | `openai/whisper-base` |
+| Diarisation | `pyannote/speaker-diarization-3.1` |
+| Chatbot local | `jpacifico/Chocolatine-3B-Instruct-DPO-v1.2` (optionnel) |
+| Chatbot API | `gpt-4o-mini` (optionnel, nécessite une clé OpenAI) |
+
+Sur GPU, Whisper et Chocolatine tournent en FP16 ; sinon en FP32 sur CPU. Si Chocolatine ne peut pas être chargé, l'application démarre quand même : seul le chatbot local est désactivé.
 
 ## 📋 Prérequis
 
 ### Backend
-- Python 3.11+
-- CUDA (recommandé pour les performances GPU)
-- ffmpeg installé sur le système
+- Python 3.10+
+- ffmpeg installé sur le système (requis par pydub / moviepy)
+- CUDA 12.6 recommandé (les dépendances installent `torch==2.8.0+cu126`)
 
-### Frontend  
+### Frontend
 - Node.js 18.3.0+
 - npm
 
 ### Clés API requises
-- `OPENAI_API_KEY` : Pour GPT-4 et Whisper
-- `HuggingFace_API_KEY` : Pour les modèles Hugging Face
+- `HF_TOKEN` : **obligatoire** — jeton Hugging Face, requis pour Whisper, pyannote et Chocolatine. Le backend refuse de démarrer sans lui. Le modèle `pyannote/speaker-diarization-3.1` étant *gated*, il faut aussi en accepter les conditions sur huggingface.co avec le compte associé au jeton.
+- `OPENAI_API_KEY` : optionnel — uniquement pour le chatbot `gpt-4o-mini`.
 
 ## 🛠️ Installation et Configuration
 
@@ -39,54 +53,19 @@ cd TranscriMate
 Créez un fichier `.env` dans le dossier `backend/` :
 
 ```bash
-# Backend/.env
-OPENAI_API_KEY_MCF=votre_clé_openai
-HuggingFace_API_KEY=votre_clé_huggingface
-SERVER_URL=http://localhost:8000
+# backend/.env
+HF_TOKEN=votre_jeton_huggingface
+OPENAI_API_KEY=votre_clé_openai   # optionnel
 ```
 
-Créez un fichier `.env` dans le dossier `frontend/` :
+Le frontend lit ses variables depuis `frontend/.env.development` (mode `npm run serve`) et `frontend/.env.production` (mode `npm run build`) :
 
 ```bash
-# Frontend/.env
 VUE_APP_API_URL=http://localhost:8000
-VUE_APP_WEBSOCKET_URL=ws://localhost:8000/streaming_audio/
+VUE_APP_WEBSOCKET_URL=ws://localhost:8000/live_transcription/
 ```
 
-## 🚀 Démarrage avec Docker (Recommandé)
-
-### Option 1: Docker Compose (Le plus simple)
-
-```bash
-# Construire et lancer tous les services
-docker-compose up --build
-
-# En arrière-plan
-docker-compose up -d --build
-
-# Arrêter les services
-docker-compose down
-```
-
-L'application sera accessible sur :
-- Frontend : http://localhost:8080
-- Backend API : http://localhost:8000
-
-### Option 2: Docker individuel
-
-#### Backend
-```bash
-cd backend
-docker build -t transcrimate-backend .
-docker run -p 8000:8000 --gpus all transcrimate-backend
-```
-
-#### Frontend
-```bash
-cd frontend
-docker build -t transcrimate-frontend .
-docker run -p 8080:8080 transcrimate-frontend
-```
+Ces variables sont injectées à la compilation par webpack : après modification, il faut relancer `npm run serve` ou reconstruire.
 
 ## 💻 Démarrage en ligne de commande (Développement)
 
@@ -104,11 +83,11 @@ venv\Scripts\activate     # Windows
 # Installer les dépendances
 pip install -r requirements.txt
 
-# Lancer le serveur
+# Lancer le serveur (depuis backend/ : main.py importe temp_manager et session_manager en imports plats)
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Le backend sera accessible sur http://localhost:8000
+Le backend sera accessible sur http://localhost:8000. Le premier démarrage télécharge plusieurs Go de modèles ; l'application répond `status: "loading"` sur `/health/` tant que le chargement n'est pas terminé.
 
 ### Frontend
 
@@ -121,173 +100,183 @@ npm install
 # Lancer en mode développement
 npm run serve
 
-# Construire pour la production
+# Construire pour la production (sortie dans frontend/dist)
 npm run build
+
+# Linter
+npm run lint
 ```
 
 Le frontend sera accessible sur http://localhost:8080
 
+## 🐳 Démarrage avec Docker
+
+```bash
+# Construire et lancer tous les services
+docker-compose up --build
+
+# En arrière-plan
+docker-compose up -d --build
+
+# Arrêter les services
+docker-compose down
+```
+
+L'application sera accessible sur :
+- Frontend : http://localhost:8080
+- Backend API : http://localhost:8000
+
+> ℹ️ Le service backend charge `backend/.env` via `env_file` : ce fichier doit exister avant `docker-compose up`, sinon Compose s'arrête avec une erreur.
+
+### Docker individuel
+
+```bash
+# Backend (image basée sur nvidia/cuda)
+cd backend
+docker build -t transcrimate-backend .
+docker run -p 8000:8000 --gpus all --env-file .env transcrimate-backend
+
+# Frontend
+cd frontend
+docker build -t transcrimate-frontend .
+docker run -p 8080:8080 transcrimate-frontend
+```
+
 ## 📱 Utilisation
 
-### 1. Transcription de fichiers
+L'interface est organisée en onglets (`🔄 Mode Streaming`, `🎤 Mode Live`, `🤖 AKABot`, `📄 API Simple`). **Seul l'onglet Streaming est actuellement accessible** : les boutons des trois autres sont commentés dans le template de `frontend/src/App.vue`, même si leurs vues existent toujours dans le code. Décommentez-les pour les réactiver.
 
-1. Accédez à l'onglet **Transcription 🎙️**
-2. Glissez-déposez un fichier audio/vidéo ou utilisez le bouton "Sélectionner un fichier"
-3. Configurez les paramètres :
-   - **Transcrire** : Transcription dans la langue originale
-   - **Traduire** : Traduction vers l'anglais
-4. Attendez le traitement automatique (extraction audio → séparation des voix → transcription)
-5. Consultez les résultats par locuteur et copiez la transcription complète
+### 1. Transcription de fichiers (🔄 Mode Streaming)
 
-### 2. ChatBot 
+1. Glissez-déposez un fichier audio/vidéo ou utilisez le bouton "Sélectionner un fichier"
+2. Choisissez la tâche : **Transcrire** (langue d'origine) ou **Traduire** (vers l'anglais)
+3. Le traitement se déroule en streaming : préparation audio → diarisation → transcription segment par segment, affichée au fur et à mesure
+4. Consultez les résultats par locuteur, réécoutez chaque segment, renommez les locuteurs et copiez la transcription complète
 
-1. Accédez à l'onglet **ChatBot 🤖**
-2. Choisissez le modèle :
-   - **OpenAI GPT** : GPT-4 pour des réponses de haute qualité
-   - **Chocolatine 🍫🥖** : Modèle français local
-3. Posez vos questions
+### 2. ChatBot (🤖 AKABot)
 
-### 3. Transcription en temps réel
+1. Choisissez le modèle : **Chocolatine 🍫🥖** (local) ou **OpenAI**
+2. Posez vos questions : la transcription courante est envoyée comme contexte
 
-1. Accédez à l'onglet **Traduction 🗣️**
-2. Configurez le mode (transcription/traduction)
-3. Cliquez sur le bouton microphone pour démarrer l'enregistrement
-4. Parlez et visualisez la transcription en temps réel
+### 3. Transcription en temps réel (🎤 Mode Live)
 
-## 🔧 Configuration avancée
+1. Cliquez sur le bouton microphone pour démarrer l'enregistrement
+2. L'audio (PCM 16 kHz mono) est envoyé au backend par WebSocket et transcrit par tranches de 2 secondes avec `whisper-base`
 
-### Modèles Whisper disponibles
-- `openai/whisper-large-v3-turbo` (recommandé)
-- `openai/whisper-large-v3`
-- `openai/whisper-medium`
-- `openai/whisper-small`
-- `openai/whisper-base`
-- `openai/whisper-tiny`
+## 📖 Documentation API
 
-### Paramètres système
-
-Le backend utilise automatiquement :
-- GPU CUDA si disponible (recommandé - 5-10x plus rapide)
-- CPU sinon (plus lent)
-- Gestion automatique de la mémoire avec déchargement des modèles après inactivité
-
-### Performance GPU recommandée
-
-| GPU | VRAM | Modèle Whisper optimal | Performance |
-|-----|------|------------------------|-------------|
-| RTX 4090 | 24GB | large-v3 | 🚀 Excellent |
-| RTX 4080 | 16GB | large-v3 | 🚀 Excellent |
-| RTX 4070 | 12GB | large/medium | ✅ Très bon |
-| **RTX 4060** | **8GB** | **medium/base** | ✅ **Bon** |
-| RTX 3060 | 6GB | base/small | 🟡 Correct |
-| CPU seulement | - | tiny/base | 🐌 Lent |
-
-## � Documentation API
-
-La documentation complète de l'API est disponible dans [API_DOCUMENTATION.md](./API_DOCUMENTATION.md).
-
-### Interface Swagger
-Une fois le backend lancé, accédez à la documentation interactive :
+Documentation interactive une fois le backend lancé :
 - **Swagger UI** : http://localhost:8000/docs
 - **ReDoc** : http://localhost:8000/redoc
 
-### Endpoints principaux
+L'API est organisée autour de **trois modes de transcription** :
 
 | Endpoint | Méthode | Description |
 |----------|---------|-------------|
-| `/docs` | GET | Interface Swagger UI |
-| `/device_type/` | GET | Configuration GPU détaillée |
-| `/initialize/` | GET | Chargement des modèles IA |
-| `/uploadfile/` | POST | Transcription avec streaming |
-| `/diarization/` | POST | Séparation des locuteurs |
-| `/ask_question/` | POST | Questions IA sur transcription |
-| `/streaming_audio/` | WebSocket | Transcription temps réel |
+| `/health/` | GET | État des modèles, CUDA, paramètres courants |
+| `/settings/` | POST | Met à jour la tâche (`transcribe` / `translate`) |
+| `/transcribe_simple/` | POST | **Mode 1** — traitement complet, réponse JSON unique |
+| `/transcribe_streaming/` | POST | **Mode 2** — traitement progressif en flux `data: {json}` (utilisé par l'interface) |
+| `/live_transcription/` | WebSocket | **Mode 3** — transcription temps réel depuis le micro |
+| `/progress/` | WebSocket | Progression des étapes de diarisation |
+| `/temp_audio/{filename}` | GET | Récupération d'un fichier audio de session |
+| `/session/create` | POST | Crée une session (fichiers temporaires) |
+| `/session/{id}/info` | GET | Informations d'une session |
+| `/session/{id}` | DELETE | Supprime une session et ses fichiers |
+| `/sessions/list` | GET | Liste des sessions actives |
+| `/ask_question/` | POST | Question au chatbot sur une transcription |
+| `/chatbot/models` | GET | Modèles de chat disponibles et leur état |
 
-## �📁 Structure du projet
+Le fichier [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) décrit une version antérieure de l'API et n'est plus à jour : référez-vous à `/docs`.
+
+### Exemples
+
+```bash
+# État des modèles et du GPU
+curl http://localhost:8000/health/
+
+# Modèles de chat disponibles
+curl http://localhost:8000/chatbot/models
+
+# Transcription complète d'un fichier (Mode 1)
+curl -F "file=@mon_audio.mp3" http://localhost:8000/transcribe_simple/
+
+# Transcription en streaming (Mode 2)
+curl -N -F "file=@mon_audio.mp3" http://localhost:8000/transcribe_streaming/
+
+# Passer en mode traduction
+curl -X POST http://localhost:8000/settings/ \
+  -H "Content-Type: application/json" \
+  -d '{"task":"translate","model":"openai/whisper-large-v3-turbo","lang":"auto"}'
+
+# Question au chatbot
+curl -X POST http://localhost:8000/ask_question/ \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Résume la discussion","transcription":"...","chat_model":"gpt-4o-mini"}'
+```
+
+> ℹ️ `/settings/` accepte les champs `model` et `lang` pour compatibilité, mais seul `task` est réellement appliqué : les modèles Whisper sont fixés au chargement du backend.
+
+## 🗂️ Gestion des fichiers temporaires
+
+Deux mécanismes cohabitent :
+
+- `backend/temp_manager.py` : fichiers de travail dans le répertoire temporaire système, supprimés à la fin de chaque requête.
+- `backend/session_manager.py` : un répertoire par session sous `backend/temp/<uuid>/`, qui survit à la requête pour permettre la relecture des segments audio depuis l'interface. Un thread de fond purge les sessions inactives depuis plus de 24 h ainsi que les répertoires orphelins.
+
+Le chemin `backend/temp/` étant relatif, lancez uvicorn depuis le dossier `backend/` pour que les fichiers soient créés au bon endroit.
+
+## 📁 Structure du projet
 
 ```
 TranscriMate/
 ├── backend/
-│   ├── main.py              # API FastAPI principale  
-│   ├── RAG.py               # Système de recherche via RAG
-│   ├── temp_manager.py      # Gestion fichiers cross-platform
-│   ├── check_gpu.py         # Vérification GPU et CUDA
-│   ├── test_gpu_models.py   # Tests de performance GPU
-│   ├── quick_gpu_test.py    # Test rapide configuration
+│   ├── main.py              # API FastAPI (3 modes, sessions, chatbot)
+│   ├── RAG.py               # Index FAISS sur Multimedia/Use_Cases (CLI autonome)
+│   ├── session_manager.py   # Sessions et fichiers persistants par utilisateur
+│   ├── temp_manager.py      # Fichiers temporaires cross-platform
 │   ├── requirements.txt     # Dépendances Python
-│   ├── Dockerfile          # Configuration Docker backend
+│   ├── Dockerfile           # Image backend (base CUDA)
 │   └── Multimedia/
-│       └── Use_Cases/      # Base de connaissances au choix
+│       └── Use_Cases/       # Base de connaissances pour le RAG
 ├── frontend/
 │   ├── src/
-│   │   ├── App.vue         # Composant principal
-│   │   ├── main.js         # Point d'entrée
-│   │   └── components/     # Composants Vue.js
-│   ├── package.json        # Dépendances Node.js
-│   └── Dockerfile         # Configuration Docker frontend
-├── API_DOCUMENTATION.md   # Documentation complète API
-├── docker-compose.yaml    # Orchestration Docker
-├── dev_start.py           # Script démarrage développement
-├── simple_start.py        # Script démarrage simple  
-└── README.md             # Ce fichier
+│   │   ├── App.vue          # Application complète (onglets, WebSockets, lecture audio)
+│   │   ├── main.js          # Point d'entrée
+│   │   └── components/      # QuestionForm, MyDictaphone, MarkdownRenderer…
+│   ├── package.json
+│   └── Dockerfile
+├── docker-compose.yaml      # Orchestration Docker
+├── k8s-config/              # Manifests Kubernetes (registre Scaleway)
+├── nginx/nginx.conf         # Reverse proxy (routes à réaligner sur l'API actuelle)
+├── uvicorn.service          # Unité systemd backend (déploiement Azure)
+├── npm_frontend.service     # Unité systemd frontend (déploiement Azure)
+└── API_DOCUMENTATION.md     # Documentation API historique (obsolète)
 ```
 
-## 🛠️ Scripts utiles
+## 🧪 Tests
 
-### Test GPU et Configuration
-```bash
-# Test rapide GPU
-python backend/quick_gpu_test.py
+Le projet n'a pas encore de suite de tests automatisée. Les scripts `test_*.py` à la racine sont des utilitaires manuels :
 
-# Test complet GPU et modèles
-python backend/check_gpu.py
+- `test_mode2.py` : envoie un fichier à `/transcribe_streaming/` sur un serveur déjà lancé et affiche les événements reçus (le chemin de fichier y est au format Windows, à adapter sous Linux).
+- `test_minimal.py`, `test_streaming_syntax.py` : scripts de mise au point d'anciennes versions du streaming, `test_streaming_syntax.py` référence une fonction qui n'existe plus.
 
-# Test performance modèles
-python backend/test_gpu_models.py
-```
-
-### Backend API
-```bash
-# Vérifier l'état des modèles et GPU
-curl http://localhost:8000/device_type/
-
-# Test rapide GPU via API
-curl http://localhost:8000/gpu_test/
-
-# Initialiser les modèles
-curl http://localhost:8000/initialize/
-
-# Maintenir les modèles en vie
-curl http://localhost:8000/keep_alive/
-```
-
-### Développement
-```bash
-# Scripts de démarrage
-python dev_start.py        # Windows - démarrage développement
-python simple_start.py     # Cross-platform - démarrage simple
-
-# Tests et qualité code
-cd backend && python -m pytest
-cd frontend && npm run lint
-cd frontend && npm run build
-```
+Vérifiez donc les modifications avec de vraies requêtes (voir les exemples `curl` ci-dessus) et `npm run lint` côté frontend.
 
 ## 🐛 Dépannage
 
-### Problèmes courants
-
-1. **Erreur CUDA** : Vérifiez que CUDA est installé et compatible
-2. **Modèles trop lents** : Utilisez un modèle Whisper plus petit (tiny/base/small)
-3. **Erreur de mémoire** : Réduisez la taille des fichiers ou utilisez CPU
-4. **Problème de CORS** : Vérifiez les URLs dans les fichiers .env
+1. **Le backend s'arrête au démarrage** : `HF_TOKEN` absent du `backend/.env`, ou conditions d'utilisation de `pyannote/speaker-diarization-3.1` non acceptées sur Hugging Face.
+2. **Erreur CUDA / mémoire insuffisante** : `whisper-large-v3-turbo` + pyannote + Chocolatine demandent beaucoup de VRAM. Sur GPU limité, laissez Chocolatine échouer au chargement (l'API continue de fonctionner) ou passez sur CPU.
+3. **Le chatbot répond « modèle non supporté »** : seules les valeurs `chocolatine` et `gpt-4o-mini` sont acceptées par `/ask_question/`.
+4. **Les segments audio ne se relisent pas** : les fichiers sont servis par `/temp_audio/{filename}` depuis le répertoire de session ; vérifiez que le backend a bien été lancé depuis `backend/`.
+5. **Problème de CORS ou d'URL** : le backend autorise toutes les origines ; vérifiez `VUE_APP_API_URL` et rebuild du frontend après modification.
 
 ### Logs
 ```bash
 # Logs Docker Compose
 docker-compose logs -f
 
-# Logs d'un service spécifique  
+# Logs d'un service spécifique
 docker-compose logs -f backend
 docker-compose logs -f frontend
 ```
@@ -297,20 +286,25 @@ docker-compose logs -f frontend
 ### Audio
 - MP3, WAV, AAC, OGG, FLAC, M4A
 
-### Vidéo  
+### Vidéo
 - MP4, MOV, 3GP, MKV
+
+Tout fichier est converti en WAV mono 16 kHz avant traitement.
 
 ## ⚡ Performances
 
 ### Recommandations système
 - **CPU** : 8+ cœurs recommandés
-- **RAM** : 16GB minimum, 32GB recommandé
-- **GPU** : NVIDIA avec CUDA pour l'accélération
+- **RAM** : 16 GB minimum, 32 GB recommandé
+- **GPU** : NVIDIA avec CUDA — 5 à 10× plus rapide que le CPU
 
-### Optimisations
-- Utilisez Docker avec `--gpus all` pour l'accélération GPU
-- Les modèles se déchargent automatiquement après 10 minutes d'inactivité
-- La transcription temps réel optimise automatiquement la qualité vs latence
+### VRAM
+| VRAM | Comportement attendu |
+|------|----------------------|
+| ≥ 16 GB | Whisper large-v3-turbo + pyannote + Chocolatine simultanément |
+| 8–12 GB | Whisper + pyannote confortables ; Chocolatine peut échouer à se charger |
+| ≤ 6 GB | Chargement possible mais tendu ; privilégier le CPU pour Chocolatine |
+| CPU seul | Fonctionnel mais lent 🐌 |
 
 ## 🤝 Contribution
 
@@ -323,7 +317,6 @@ docker-compose logs -f frontend
 ## 📄 Licence
 
 Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
-
 
 ---
 

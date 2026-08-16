@@ -206,9 +206,9 @@
                     <div>
                       <div>
                         <label class="switch">
-                          <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
+                          <input type="checkbox" :checked="settings.chat_model === 'gpt-4o-mini'" @change="toggleModel">
                           <span class="slider"></span>
-                        </label> <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
+                        </label> <span :class="{ bold: settings.chat_model === 'gpt-4o-mini'}">OpenAI GPT</span>
                       </div>
                       <div>
                         <label class="switch">
@@ -488,9 +488,9 @@
                     <div>
                       <div>
                         <label class="switch">
-                          <input type="checkbox" :checked="settings.chat_model === 'gpt-4'" @change="toggleModel">
+                          <input type="checkbox" :checked="settings.chat_model === 'gpt-4o-mini'" @change="toggleModel">
                           <span class="slider"></span>
-                        </label> <span :class="{ bold: settings.chat_model === 'gpt-4'}">OpenAI GPT</span>
+                        </label> <span :class="{ bold: settings.chat_model === 'gpt-4o-mini'}">OpenAI GPT</span>
                       </div>
                       <div>
                         <label class="switch">
@@ -738,7 +738,7 @@ export default {
         task: "transcribe", // valeur par défaut
         model: "openai/whisper-large-v3-turbo",
         lang: "auto",
-        chat_model: 'gpt-4'
+        chat_model: 'gpt-4o-mini'
       },
 
       availableModels: [
@@ -945,7 +945,7 @@ export default {
 
       toggleModel() {
         // Basculer entre "translate" et "transcribe" en fonction de l'état du switch
-        this.settings.chat_model = this.settings.chat_model === 'gpt-4' ? 'chocolatine' : 'gpt-4';
+        this.settings.chat_model = this.settings.chat_model === 'gpt-4o-mini' ? 'chocolatine' : 'gpt-4o-mini';
       },
 
     onToggleChange(newValue) {
